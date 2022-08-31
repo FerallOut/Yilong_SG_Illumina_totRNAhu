@@ -1,4 +1,36 @@
+##### standard #####
+
+# RStudio files
 .Rproj.user
+
+# History files
 .Rhistory
+
+# Session data files
 .RData
+
+# User-specific files
 .Ruserdata
+
+# R Environment Variables
+.Renviron
+
+
+
+
+
+##### my files #####
+# produced vignettes
+vignettes/*.html
+
+
+.gitignore
+.*
+*.out
+*.err
+./data
+./libs
+./tools
+*.Rproj
+./sandbox
+./bin/prototypes
