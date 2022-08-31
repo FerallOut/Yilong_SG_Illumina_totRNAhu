@@ -1,0 +1,23 @@
+reads.FileName1	/data/manke/group/balan/projects/Yilong_SG_Illumina_totRNAhu/FANCI_RNA_seq_4stresses/extdata/rna_1_1.fq.bz2
+reads.FileName2	NA
+reads.md5subsum1	89282741f79188e8b8bfb517f606c035
+reads.md5subsum2	NA
+samplesFormat	fastq
+genome	/data/manke/group/balan/projects/Yilong_SG_Illumina_totRNAhu/FANCI_RNA_seq_4stresses/extdata/hg19sub.fa
+genome.md5	6cf516257ac32f9f881ef384add30864
+genomeFormat	file
+aux	NA
+aux.md5	NA
+aligner	Rhisat2
+aligner.version	1.10.0
+maxHits	1
+paired	no
+splicedAlignment	TRUE
+snpFile	NA
+snpFile.md5	NA
+bisulfite	no
+alignmentParameter	-k 2
+geneAnnotation	NA
+geneAnnotationFormat	NA
+geneAnnotation.md5	NA
+QuasR.version	1.34.0

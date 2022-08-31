@@ -1,0 +1,511 @@
+---
+title: "2297_Yilong_mRNA_stressGranules_DESeq2"
+output: html_notebook
+toc: true
+---
+
+
+Sample sheet
+
+sample name	Barcode	annotation		annotation*
+m1	22L007337	mock		
+m2	22L007338	mock		
+m3	22L007339	mock		
+U1	22L007340	UVA		
+U2	22L007341	UVA		
+U3	22L007342	UVA		
+4su1	22L007343	4sU		
+4su2	22L007344	4sU		
+4su3	22L007345	4sU		
+4UH1	22L007346	4sU+UVA-puromycin High		
+4UH2	22L007347	4sU+UVA-puromycin High	should be 4UL3	
+4UH3	22L007348	4sU+UVA-puromycin High		
+4UL1	22L007349	4sU+UVA-puromycin Low		
+4UL2	22L007350	4sU+UVA-puromycin Low		
+4UL3	22L007351	4sU+UVA-puromycin Low	should be 4UH2	
+
+- mock, UVA and 4sU should trigger very mild response in cells
+- 4sU+UVA has a strong effect on cells and induces stress granules. Puromycin High are cells w/o stress granule, puromycin low are cells with stress granules
+```{r, load_libraries}
+#BiocManager::install(c("tidyverse", "apeglm", "ashr"))
+
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(DESeq2))
+suppressPackageStartupMessages(library(apeglm))
+suppressPackageStartupMessages(library(ashr))
+suppressPackageStartupMessages(library(pheatmap))
+```
+### Obtaining the differentially expressed genes 
+
+This workflow uses the *DESeq2* R packages. We can start from the counts summarized at gene level, found in:
+
+### Load the data
+```{r, load_data}
+# dfolder <- "/data/akhtar/group2/snakequest_result/FANCI_RNA_seq_4stresses/"
+dfolder <- "/data/manke/processing/balan/Yilong_SG_data/2022.03_DE_genes_transcript/"
+fcounts_gene <- "counts.tsv"
+
+dfcounts_gene <- read.delim(paste0(dfolder, fcounts_gene), header = TRUE, sep='\t', na.strings="NA" , row.names=1)
+
+## alphanumeric sort of columns
+dfcounts_gene <- dfcounts_gene[,gtools::mixedorder(colnames(dfcounts_gene))]
+# reorder the columns!
+dfcounts_gene <- dfcounts_gene[ , c("m1", "m2", "m3", "s4su1", "s4su2", "s4su3", "s4UH1", "s4UL3", "s4UH3", "s4UL1", "s4UL2", "s4UH2", "U1", "U2", "U3") ]
+
+# remove the all the '_PAR_Y' rows because are empty
+counts_exon <- dfcounts_gene[!row.names(dfcounts_gene) %in% row.names(dfcounts_gene[grepl(pattern="_PAR_Y", row.names(dfcounts_gene) ),]),]
+
+# remove the version number
+row.names(counts_exon) <- gsub("\\..*","", row.names(counts_exon))
+
+```
+
+There are `r dim(dfcounts_gene)[1]` genes/ rows and `r dim(dfcounts_gene)[2]` samples/ columns in the data frame.
+
+### Check the metadata
+```{r, check_counts}
+fmeta_all <- "/data/processing2/balan_Yilong/project_2297_45nG7vuc_mRNA-seq/sample_sheets/corrected_sampleSheet_switch_UL3_to_UH2.tsv"
+dfmeta_all <- read.delim(fmeta_all, header = TRUE, sep='\t', na.strings="NA" , row.names=1)
+```
+
+
+
+```{r, check_input}
+counts_exon  %>% head()
+dfmeta_all  %>% head()
+#dfcounts_gene <- dfcounts_gene %>% column_to_rownames("gene_id") 
+```
+############################
+
+```{r, factoring}
+dfmeta_all$condition <- factor(dfmeta_all$condition) 
+dfmeta_all$group <- factor(dfmeta_all$group) 
+```
+
+```{r, design}
+#create design
+design <- ~condition
+```
+
+
+```{r, final_check_create_dds_obj}
+#check if the col and rows are in the same order:
+#all(rownames(dfmeta_all) == colnames(dfcounts_gene))   ## > FALSE
+all(rownames(dfmeta_all) == colnames(counts_exon[ ,rownames(dfmeta_all)]) )
+
+#make dds obj - AND rearrange the columns from the counts df to correspond to the ones in the metadata
+dds <- DESeq2::DESeqDataSetFromMatrix(countData = counts_exon[,rownames(dfmeta_all)], colData = dfmeta_all, design = design)
+################################
+```
+
+```{r, plot_PCA_batch}
+#png("./manual_PCA.png", width=1600, height=800, units = "px", bg = "white")
+
+rld_PCA <- plotPCA(rlog(dds, blind = TRUE), intgroup="condition", returnData=TRUE)
+percentVar <- round(100 * attr(rld_PCA, "percentVar"), 1)   # rounded values for each axis of PC variance
+ggplot(rld_PCA, aes(PC1, PC2, color=condition)) +
+  geom_point(size=3) +
+  scale_shape_manual(values=c(3, 1, 2))+    # change shapes of symbols
+  scale_size_manual(values=c(8, 8, 8))+     # change sizes of symbols
+  xlab(paste0("PC1: ",percentVar[1])) +
+  ylab(paste0("PC2: ",percentVar[2])) 
+
+#dev.off()
+```
+
+
+```{r, DESeq2_batch}
+dds<- DESeq2::DESeq(dds)
+#plotDispEsts(dds)
+```
+
+```{r, results}
+# fdr=0.05
+# lfc_filter=2
+# #resultsNames(dds)          # get names of contrasts
+# #dfmeta_all$condition       # each condition
+# 
+# ## We want these comparisons: mock vs (4UH, 4UL) and 4UH vs 4UL
+# contrast_tot <- list(c("condition", levels(dfmeta_all$condition)[3], levels(dfmeta_all$condition)[4]))
+# 
+# #DE_gene_totRNA_arsenite_vs_totRNA_mock <- DESeq2::results(dds_batch, contrast=contrast_tot[[1]], independentFiltering=TRUE, alpha=0.05, lfcThreshold=lfc_filter, pAdjustMethod="BH", parallel=TRUE)
+# 
+# #DE_gene_totRNA_arsenite_vs_totRNA_mock_ashr <- lfcShrink(dds_batch, contrast=contrast_tot[[1]], res=DE_gene_totRNA_arsenite_vs_totRNA_mock, type="ashr")
+# 
+# #DE_gene_totRNA_arsenite_vs_totRNA_mock_apeglm <- lfcShrink(dds_batch, coef="condition_totRNA_arsenite_vs_totRNA_mock", res=DE_gene_totRNA_arsenite_vs_totRNA_mock, type="apeglm", lfcThreshold=lfc_filter)
+# 
+# for (a in contrast_tot){
+#   print(paste0("DE_gene_", a[2], "_vs_", a[3]) )
+# 
+#   assign(paste0("DE_gene_", a[2], "_vs_", a[3]), 
+#          DESeq2::results(dds, contrast=a, alpha=0.05, pAdjustMethod="BH", parallel=TRUE) )
+#   
+#   assign(paste0("DE_gene_", a[2], "_vs_", a[3], "_ashr"), 
+#          DESeq2::lfcShrink(dds, contrast=a, type="ashr", 
+#          res=get(paste0("DE_gene_", a[2], "_vs_", a[3] ) ) 
+#          ) 
+#   )
+# }
+# 
+# 
+# # drawLines <- function() abline(h=c(-2,2),col="dodgerblue",lwd=2)
+# #plotMA(dds, lfcThreshold=lfc_filter); drawLines()
+# 
+# 
+# #################Stopped here######################
+# 
+# 
+# 
+# output <- list(dds = dds, ddr = DE_gene_treat_4sU_puroHigh_vs_treat_4sU_puroLow, ddr_shrunk = DE_gene_treat_4sU_puroHigh_vs_treat_4sU_puroLow)
+# 
+# 
+# 
+# 
+# 
+# DEseqout <- DESeq_basic(countData = '../featureCounts/counts.tsv', colData = coldata, design =d)
+```
+
+
+
+```{r, heatmap2}
+# import genes from Yilong
+genes_Yilong <- read.delim('/data/manke/processing/balan/Yilong_SG_data/2022.03_DE_genes_transcript/analysis_bam_default/new_plots/genes.tab', header = F, sep='\t', na.strings="NA")
+
+# subset the file by finding the index of the rows starting with '#'
+#genes_Yilong[grep("^#", genes_Yilong$V1), ]
+indices <- grep("^#", genes_Yilong$V1)
+
+# read each section of the file as a separate df:
+section_names <-genes_Yilong[grep("^#", genes_Yilong$V1), ]$V1
+# reformat names
+section_names <- gsub("#","",section_names) 
+
+section_names[2] <- gsub("-","_",section_names[2])
+section_names[3] <- strsplit(section_names[3], ' ')[[1]][1]
+section_names[4] <- gsub(" ","_",section_names[4])
+
+# assign each section to names and headers
+for (i in seq(1, length(indices)-1) ) {
+  assign(section_names[i], genes_Yilong[c((indices[i]+2):indices[i+1]-1), ]  )
+  print(dim(get(section_names[i]))[1])
+}
+
+# load DB to translate the symbols
+library(biomaRt)
+
+# symbols ids read into the 4 df:
+# list available DB that exist in Ensembl:
+#listEnsembl()
+# using Ensembl90
+listEnsemblArchives()
+listEnsembl(version = 90)
+
+ensembl90 <- useEnsembl(biomart = 'genes', 
+                       dataset = 'hsapiens_gene_ensembl',
+                       version = 90)
+
+# retrieve the attributes for the query:
+attr <- listAttributes(ensembl90)
+# what I need is symbol -> ensemblID
+#'hgnc_symbol', 'QQQexternal_gene_name', 'PPPensembl_gene_id', 'hgnc_id'
+		
+# retrieve the filters for the query:
+filters <- listFilters(ensembl90)
+# what filters I want: gene stable id -> 'ensembl_gene_id'
+
+# build a query and run it:
+df.G1_S <- getBM(attributes = c('external_gene_name', 'ensembl_gene_id'),
+		filters = "external_gene_name",
+		values = G1_S$V2[-1],
+		mart = ensembl90)
+
+df.G2_M <- getBM(attributes = c('external_gene_name', 'ensembl_gene_id'),
+		filters = "external_gene_name",
+		values = G2_M$V2[-1],
+		mart = ensembl90)
+
+df.inflammatory <- getBM(attributes = c('external_gene_name', 'ensembl_gene_id'),
+		filters = "external_gene_name",
+		values = Inflammatory$V1[-1],
+		mart = ensembl90)
+
+df.dsRNA_response <- getBM(attributes = c('external_gene_name', 'ensembl_gene_id'),
+		filters = "external_gene_name",
+		values = dsRNA_response$V1[-1],
+		mart = ensembl90)
+```
+
+
+```{r, subset}
+#243
+
+rld <- rlog(dds, blind = FALSE)
+vsd <- vst(dds, blind=TRUE)
+
+## FOR RLD:
+# subset genes for each df
+#subset(df, subset = rownames(df) %in% genelist)
+#counts.G1_S <- subset(less_counts_exon, subset = row.names(less_counts_exon) %in% df.G1_S$ensembl_gene_id)
+#counts.G2_M <- subset(less_counts_exon, subset = row.names(less_counts_exon) %in% df.G2_M$ensembl_gene_id)
+#counts.inflammatory <- subset(less_counts_exon, subset = row.names(less_counts_exon) %in% df.inflammatory$ensembl_gene_id)
+#counts.dsRNA_response <- subset(less_counts_exon, subset = row.names(less_counts_exon) %in% df.dsRNA_response$ensembl_gene_id)
+
+# same as above but now I get to keep the gene symbol names
+rld.G1_S <- merge(assay(rld), df.G1_S, by.x='row.names', by.y='ensembl_gene_id', all=FALSE)
+rld.G1_S$cluster <- as.factor(rep("G1_S",dim(rld.G1_S)[1]))
+
+rld.G2_M <- merge(assay(rld), df.G2_M, by.x='row.names', by.y='ensembl_gene_id', all=FALSE)
+rld.G2_M$cluster <- as.factor(rep("G2_M",dim(rld.G2_M)[1]))
+
+rld.inflammatory <- merge(assay(rld), df.inflammatory, by.x='row.names', by.y='ensembl_gene_id', all=FALSE)
+rld.inflammatory$cluster <- as.factor(rep("Inflammatory (NF-kB)",dim(rld.inflammatory)[1]))
+
+rld.dsRNA_response <- merge(assay(rld), df.dsRNA_response, by.x='row.names', by.y='ensembl_gene_id', all=FALSE)
+rld.dsRNA_response$cluster <- as.factor(rep("dsRNA_response",dim(rld.dsRNA_response)[1]))
+
+# heatmaps for each of them with all samples
+# heatmap(as.matrix(rld.G1_S[,c(-1,-ncol(rld.G1_S))]), Rowv = NA, Colv = NA)
+# heatmap(as.matrix(rld.G2_M[,c(-1,-ncol(rld.G2_M))]), Rowv = NA, Colv = NA)
+# heatmap(as.matrix(rld.inflammatory[,c(-1,-ncol(rld.inflammatory))]), Rowv = NA, Colv = NA)
+# heatmap(as.matrix(rld.dsRNA_response[,c(-1,-ncol(rld.dsRNA_response))]), Rowv = NA, Colv = NA)
+
+
+# pull all of them together
+counts.all_rld <- rbind(rld.G1_S, rld.G2_M, rld.inflammatory, rld.dsRNA_response)
+
+## set the 'Row.names' column as row names
+# counts.all_rld <- data.frame(counts.all_rld[,-1], row.names=counts.all_rld[,1])
+
+## not possible because I have 37 duplicated names
+# table(duplicated(counts.all_rld$Row.names))
+# counts.all_rld$external_gene_name[duplicated(counts.all_rld$Row.names)]
+
+## verify:
+# counts.all_rld[counts.all_rld$external_gene_name=='MAFF',]
+
+```
+
+
+```{r, pheatmap_all, fig.height=15, fig.width= }
+library("pheatmap")
+
+
+# genes to be plotted from Yilong
+x <- counts.all_rld[1:243,]
+
+## all the columns:
+my_sample_col <- data.frame(sample = rep(c("mock", "4su", "4UH", "4UL", "U"), c(rep(3,5))))
+row.names(my_sample_col) <- colnames(x[,-c(1, ncol(x)-1, ncol(x))])
+
+my_gene_col <- x$cluster
+
+x.my_gene_col <- x["cluster"]
+
+paletteLength <- 50
+
+# use floor and ceiling to deal with even/odd length pallettelengths
+myBreaks_rld <- c(seq(min(x[,-c(1, ncol(x)-1, ncol(x))]), 0, length.out=ceiling(paletteLength/2) + 1), 
+              seq(max(x[,-c(1, ncol(x)-1, ncol(x))])/paletteLength, max(x[,-c(1, ncol(x)-1, ncol(x))]), length.out=floor(paletteLength/2)))
+
+#pheatmap(counts.all_samples[,c(-1,-ncol(counts.all_samples))], #annotation_row = counts.all_samples$external_gene_name, 
+#         annotation_col = my_sample_col,
+#          cluster_rows=FALSE, cluster_cols=FALSE)
+
+#pheatmap(  assay(rld)[1:50,] ) #,  cluster_rows=FALSE, show_rownames=FALSE,cluster_cols=FALSE, annotation_col=df )
+
+library("gplots")
+
+# png("2297_rld_heatmap.png",    # create PNG for the heat map
+#   width = 5*300,        # 5 x 300 pixels
+#   height = 5*300,
+#   res = 300,            # 300 pixels per inch
+#   pointsize = 8)        # smaller font size
+
+pheatmap(x[,-c(1, ncol(x)-1, ncol(x))], 
+         cluster_rows=FALSE, cluster_cols=FALSE,
+         annotation_row = x.my_gene_col, annotation_col = my_sample_col,
+         gaps_row = head(as.numeric(cumsum(table(droplevels(x$cluster) ) )), -1),  # break after each cluster
+        labels_row=x$external_gene_name,             #labels_row=x$Row.names
+        cellwidth = 25, cellheight = 3.8, fontsize=4,
+        #color = colorRampPalette(rev(c("#D73027", "#FC8D59", "#FEE090", "#FFFFBF", "#E0F3F8", "#91BFDB", "#4575B4")))(paletteLength),
+        color = bluered(paletteLength),
+        #kmeans_k = NA, 
+        scale="row",
+        #breaks=myBreaks_rld
+        )
+
+#dev.off()
+```
+
+
+
+```{r, heatmap_Asifa, fig.height=15, fig.width= }
+
+reduce.x <- x[, -grep("^U|4su", colnames(x))]
+
+
+ref.rld <- as.data.frame(t(rev(as.data.frame(t(reduce.x)))))
+z <- ref.rld[,-c(1, ncol(ref.rld)-1, ncol(ref.rld))]
+zz <- as.matrix(sapply(z, as.numeric))
+
+
+heatmap((zz), Rowv = NA, Colv = NA, labRow=reduce.x[,ncol(reduce.x)-1], main='2297', col=bluered(paletteLength), scale='row')
+#heatmap(apply(zz, 1, scale), Rowv = NA, Colv = NA, labRow=reduce.x[,ncol(reduce.x)-1], main='2297', col=bluered(paletteLength))
+
+
+# plot(density(zz[200,]))
+# plot(density(scale(zz[200,])))
+# 
+# tail(zz)
+```
+
+```{r, pheatmap_necessary, fig.height=25, fig.width= }
+
+
+
+## only the necessary columns AND remove the rows with zero counts:
+reduce.x2 <- reduce.x[rowSums(reduce.x[, -c(1, ncol(reduce.x)-1, ncol(reduce.x))] != 0) != 0, ]
+
+## verify: compare df and find all the removed rows: 21 rows
+#require(dplyr) 
+#anti_join(reduce.x,reduce.x2)
+
+
+
+my_sample_col2 <- data.frame(sample = rep(c("mock", "4UH", "4UL"), c(rep(3,3))))
+row.names(my_sample_col2) <- colnames(reduce.x2[,-c(1, ncol(reduce.x2)-1, ncol(reduce.x2))])
+
+x.my_gene_col2 <- reduce.x2$cluster
+
+x.my_gene_col2 <- reduce.x2["cluster"]
+
+paletteLength <- 10
+
+# use floor and ceiling to deal with even/odd length pallettelengths
+myBreaks_rld2 <- c(
+  seq(min(reduce.x2[,-c(1, ncol(reduce.x2)-1, ncol(reduce.x2))]), 0, length.out=ceiling(paletteLength/2) + 1), 
+  seq(max(reduce.x2[,-c(1, ncol(reduce.x2)-1, ncol(reduce.x2))])/paletteLength, max(reduce.x2[,-c(1, ncol(reduce.x2)-1, ncol(reduce.x2))]),
+  length.out=floor(paletteLength/2))
+  )
+
+
+
+library(grid)
+
+## Edit body of pheatmap:::draw_colnames, customizing it to your liking
+# draw_colnames_45 <- function (coln, ...) {
+#     m = length(coln)
+#     x = (1:m)/m - 1/2/m
+#     grid.text(coln, x = x, y = unit(0.96, "npc"), vjust = .5, 
+#         hjust = 1, rot = 45, gp = gpar(...)) ## Was 'hjust=0' and 'rot=270'
+# }
+
+## For pheatmap_1.0.8 and later:
+draw_colnames_45 <- function (coln, gaps, ...) {
+    coord = pheatmap:::find_coordinates(length(coln), gaps)
+    x = coord$coord - 0.3 * coord$size
+    res = textGrob(coln, x = x, y = unit(1, "npc") - unit(3,"bigpts"), vjust = 0.5, hjust = 1, rot = 45, gp = gpar(...))
+    return(res)}
+
+## 'Overwrite' default draw_colnames with your own version 
+assignInNamespace(x="draw_colnames", value="draw_colnames_45",
+ns=asNamespace("pheatmap"))
+
+
+# save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+#    stopifnot(!missing(x))
+#    stopifnot(!missing(filename))
+#    pdf(filename, width=width, height=height)
+#    grid::grid.newpage()
+#    grid::grid.draw(x$gtable)
+#    dev.off()
+# }
+
+
+get_plot_dims <- function(heat_map)
+{
+  plot_height <- sum(sapply(heat_map$gtable$heights, grid::convertHeight, "in"))
+  plot_width  <- sum(sapply(heat_map$gtable$widths, grid::convertWidth, "in"))
+  return(list(height = plot_height, width = plot_width))
+}
+
+## Try it out
+# par(cex.main=2.5)
+# png("./2297_rld_heatmap_largeBox_col1_interval50.png",    # create PNG for the heat map
+#   width = 5*300,        # 5 x 300 pixels
+#   height = 5*300,
+#   res = 300,            # 300 pixels per inch
+#   pointsize = 8)        # smaller font size
+
+le <- pheatmap(reduce.x2[,-c(1, ncol(reduce.x2)-1, ncol(reduce.x2))], 
+         cluster_rows=FALSE, cluster_cols=FALSE,
+         annotation_row = x.my_gene_col2, annotation_col = my_sample_col2,
+         gaps_row = head(as.numeric(cumsum(table(droplevels(reduce.x2$cluster) ) )), -1),  # break after each cluster
+        labels_row=reduce.x2$external_gene_name,             #labels_row=x$Row.names
+        cellwidth = 25, cellheight = 4, fontsize=4,
+        #color = colorRampPalette(rev(c("#D73027", "#FC8D59", "#FEE090", "#FFFFBF", "#E0F3F8", "#91BFDB", "#4575B4")))(paletteLength),
+        #color = colorRampPalette(c("darkblue", "mediumblue", "dodgerblue", "white", "orange", "red", "darkred"))(paletteLength),
+        #color = bluered(paletteLength),
+        main = "run #2297_heatmap on mock, 4UH and 4UL",
+        #kmeans_k = NA, 
+        scale="row",
+        border_color = NA
+        #breaks=myBreaks_rld2
+        )
+
+# pheatmap(reduce.x[,-c(1, ncol(reduce.x)-1, ncol(reduce.x))],
+#          cluster_rows=FALSE, cluster_cols=FALSE,
+#          annotation_row = x.my_gene_col, annotation_col = my_sample_col,
+#          gaps_row = head(as.numeric(cumsum(table(droplevels(reduce.x$cluster) ) )), -1),  # break after each cluster
+#         labels_row=reduce.x$external_gene_name,             #labels_row=x$Row.names
+#         cellwidth = 25, cellheight = 3.8, fontsize=4,
+#         #color = colorRampPalette(rev(c("#D73027", "#FC8D59", "#FEE090", "#FFFFBF", "#E0F3F8", "#91BFDB", "#4575B4")))(paletteLength),
+#         color = bluered(paletteLength),
+#         #kmeans_k = NA,
+#         scale="row",
+#         breaks=myBreaks_rld
+#         )
+
+#dev.off()
+
+#save_pheatmap_pdf(le, "./2297_rld_heatmap_largeBox_col1_interval50.pdf")
+
+
+plot_dims <- get_plot_dims(le)
+
+pdf("./2297_rld_heatmap_largeBox_col3_interval10.pdf", height = plot_dims$height, width = plot_dims$width, #units = "in", res = 72
+    )
+le
+dev.off()
+```
+
+
+```{r, heatmap_Asifa2, fig.height=15, fig.width= }
+
+
+
+
+
+# png("2297_rld_heatmap.png",    # create PNG for the heat map
+#   width = 5*300,        # 5 x 300 pixels
+#   height = 5*300,
+#   res = 300,            # 300 pixels per inch
+#   pointsize = 8)        # smaller font size
+
+heatmap(zz0[nrow(zz0):1,], Rowv = NA, Colv = NA, labRow=y[,ncol(y)-1], main='2297', col=bluered(paletteLength))
+
+pheatmap(reduce.x[,-c(1, ncol(reduce.x)-1, ncol(reduce.x))], 
+         cluster_rows=FALSE, cluster_cols=FALSE,
+         annotation_row = x.my_gene_col, annotation_col = my_sample_col,
+         gaps_row = head(as.numeric(cumsum(table(droplevels(reduce.x$cluster) ) )), -1),  # break after each cluster
+        #show_rownames=FALSE, 
+        labels_row=reduce.x$external_gene_name, #labels_row=x$Row.names
+        cellwidth = 25, cellheight = 3.8, fontsize=4,
+        #color = colorRampPalette(rev(c("#D73027", "#FC8D59", "#FEE090", "#FFFFBF", "#E0F3F8", "#91BFDB", "#4575B4")))(paletteLength),
+        # color = bluered(paletteLength),
+        scale="row",
+         # breaks=myBreaks_rld
+        )
+
+#dev.off()
+```

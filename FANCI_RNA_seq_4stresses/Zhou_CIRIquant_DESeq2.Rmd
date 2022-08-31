@@ -10,7 +10,34 @@ output:
 
 # 1. Sample sheet and background
 
-TO BE FILLED
+sample name     note    Barcode note-1
+1       total RNA of mock-1     22L005998       collected at 20200215
+2       total RNA of mock-2     22L005999       collected at 20200215
+3       total RNA of mock-3     22L006000       collected at 20200218
+4       total RNA of arsenite-1 22L006001       collected at 20200215
+5       total RNA of arsenite-2 22L006002       collected at 20200218
+6       total RNA of arsenite-3 22L006003       collected at 20200218
+7       total RNA of HS-1       22L006004       collected at 20200218
+8       total RNA of HS-2       22L006005       collected at 20200218
+9       total RNA of HS-3       22L006006       collected at 20200218
+10      total RNA of NaCl-1     22L006007       collected at 20200215
+11      total RNA of NaCl-2     22L006008       collected at 20200218
+12      total RNA of NaCl-3     22L006009       collected at 20200218
+13      total RNA of 4sUV-1     22L006010       collected at 20200215
+14      total RNA of 4sUV-2     22L006011       collected at 20200215
+15      total RNA of 4sUV-3     22L006012       collected at 20200218
+16      SG RNA of arsenite-1    22L006013       collected at 20200215
+17      SG RNA of arsenite-2    22L006014       collected at 20200218
+18      SG RNA of arsenite-3    22L006015       collected at 20200218
+19      SG RNA of HS-1  22L006016       collected at 20200218
+20      SG RNA of HS-2  22L006017       collected at 20200218
+21      SG RNA of HS-3  22L006018       collected at 20200218
+22      SG RNA of  NaCl-1       22L006019       collected at 20200215
+23      SG RNA of  NaCl-2       22L006020       collected at 20200218
+24      SG RNA of  NaCl-3       22L006021       collected at 20200218
+25      SG RNA of UV-1  22L006022       collected at 20200215
+26      SG RNA of UV-2  22L006023       collected at 20200215
+27      SG RNA of UV-3  22L006024       collected at 20200218
 
 # 2. Load libraries
 ```{r, load_libraries, include=FALSE}
@@ -19,6 +46,7 @@ suppressPackageStartupMessages(library(DESeq2))
 suppressPackageStartupMessages(library(apeglm))
 suppressPackageStartupMessages(library(ashr))
 suppressPackageStartupMessages(library(pheatmap))
+suppressPackageStartupMessages(library(tibble))
 library(RColorBrewer)
 ```
 
@@ -28,11 +56,11 @@ This workflow uses the *DESeq2* R packages. We can start from the counts summari
 
 ## 3.a) Load the data
 ```{r, load_data}
-dfolder <- "/data/processing3/balan/projects/2218_Yilong_part2/analysis_CIRI2_full/without_CIRI_DE/"
+dfolder <- "/data/akhtar/group2/snakequest_result/FANCI_RNA_seq_4stresses/analysis_CIRI2_full/without_CIRI_DE/"
 fcounts_gene <- "gene_count_matrix.csv"
 fcounts_transcripts <- "transcript_count_matrix.csv"
 
-dfcounts_gene <- read.delim(paste0(dfolder, fcounts_gene), header = TRUE, sep=',', na.strings="NA" )#, row.names=1) needs work later
+dfcounts_gene <- read.delim(paste0(dfolder, fcounts_gene), header = TRUE, sep=',', na.strings="NA") #, row.names=1) needs work later
 dfcounts_transcripts <- read.delim(paste0(dfolder, fcounts_transcripts), header = TRUE, sep=',', na.strings="NA", row.names=1)
 ```
 
@@ -40,7 +68,7 @@ There are `r dim(dfcounts_gene)[1]` genes/ rows and `r dim(dfcounts_gene)[2]` sa
 
 ## 3.b) Check the metadata
 ```{r, label=check_counts, echo=FALSE}
-fmeta_all <- "/data/processing1/bioinfo_core/requests/FANCI_RNA_seq_4stresses/sampleSheets/all_batch_corrected_sampleSheet.tsv"
+fmeta_all <- "/data/akhtar/group2/snakequest_result/FANCI_RNA_seq_4stresses/analysis_CIRI2_full/without_CIRI_DE/all_batch_corrected_sampleSheet.tsv"
 dfmeta_all <- read.delim(fmeta_all, header = TRUE, sep='\t', na.strings="NA" , row.names=1)
 ```
 
@@ -66,11 +94,14 @@ dfcounts_gene$gene_symbol <- NULL
 # rename the columns in both 'gene' and 'transcript' files
   # change metadata: add column, replace some names, add numbers
     dfmeta_all$rename <- dfmeta_all$condition
-    dfmeta_all$rename <- gsub('arsenite', 'ars', gsub('tot', 'total', dfmeta_all$rename) )
+    dfmeta_all$rename <- gsub('arsenite', 'ars', dfmeta_all$rename) 
     dfmeta_all$rename <- paste(dfmeta_all$rename, rep_len(1:3, nrow(dfmeta_all)), sep="")
 
     
   # rename the columns for genes and transcripts files:
+    colnames(dfcounts_gene) <- gsub('total', 'tot', colnames(dfcounts_gene)) 
+    colnames(dfcounts_transcripts) <- gsub('total', 'tot', colnames(dfcounts_transcripts)) 
+      
     found <- match(colnames(dfcounts_gene), dfmeta_all$rename, nomatch = 0)
     colnames(dfcounts_gene)[colnames(dfcounts_gene) %in% dfmeta_all$rename] <- rownames(dfmeta_all)[found]
  
@@ -81,6 +112,13 @@ dfcounts_gene$gene_symbol <- NULL
       dfmeta_all$rename <- NULL
       
 # reorder the columns alphanumerically
+suppressPackageStartupMessages(library(gtools))
+
+dfcounts_gene <- dfcounts_gene[,gtools::mixedorder(colnames(dfcounts_gene))]
+dfcounts_transcripts <- dfcounts_transcripts[,gtools::mixedorder(colnames(dfcounts_transcripts))]
+
+
+
 dfcounts_gene  %>% head()
 dfcounts_transcripts  %>% head()
 dfmeta_all  %>% head()
@@ -115,7 +153,7 @@ dds_batch_transcript <- DESeq2::DESeqDataSetFromMatrix(countData = dfcounts_tran
 
 ## 3.f) PCA plots
 
-Only the code for gene PCA is shown.
+Only the code for gene-PCA is shown.
 ```{r, plot_PCA_batch_gene, echo=FALSE}
 #png("./manual_PCA.png", width=1600, height=800, units = "px", bg = "white")
 
@@ -257,18 +295,30 @@ for (a in contrast_tot){
          DESeq2::lfcShrink(res_filt_batch_gene, contrast=a, type="ashr", 
          res=get(paste0("DE_gene_", a[2], "_vs_", a[3] ) )) 
   )
+  
   # subset only the genes that have padj < 0.05
   assign(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"),
          subset(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_ashr")), padj < 0.05)  
   )
+  
   # sort subset by padj
 	assign(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort"),
 	       get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"))[order(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"))$padj),]
 	)
+
+	
+	# sort subset by lfc
+	assign(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05lfc_sort"),
+	       get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"))[order(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"))$log2FoldChange),]
+	)
+	
+	
 	# write out files by adding a name for the rownames as well (it is 'tab' separated - not by space)
 	new_names <- c('gene_ID')
-	write.table(new_names, file = paste0(dfolder, "DE_gene_CIRIout/", "DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=FALSE, row.names=FALSE, quote = F, eol='\t') 
-	write.table(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort")), file = paste0(dfolder, "DE_gene_CIRIout/", "DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=TRUE, row.names=TRUE, sep = "\t", quote = F, append = TRUE) 
+
+#	write.table(new_names, file = paste0(outf, "DE_gene_CIRIout/", "DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=FALSE, row.names=FALSE, quote = F, eol='\t') 
+  
+#	write.table(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort")), file = paste0(dfolder, "DE_gene_CIRIout/", "DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=TRUE, row.names=TRUE, sep = "\t", quote = F, append = TRUE) 
 	}
 
 
@@ -287,10 +337,10 @@ drawLines <- function() abline(h=c(-2,2),col="dodgerblue",lwd=2)
 #     #dev.off()
 # } 
 
-  plotMA(DE_gene_totRNA_mock_vs_totRNA_arsenite_ashr, main="DE_gene_totRNA_mock_vs_totRNA_arsenite_ashr"); drawLines()
-  plotMA(DE_gene_totRNA_mock_vs_totRNA_NaCl_ashr, main="DE_gene_totRNA_mock_vs_totRNA_NaCl_ashr"); drawLines()
-  plotMA(DE_gene_totRNA_mock_vs_totRNA_HS_ashr, main="DE_gene_totRNA_mock_vs_totRNA_HS_ashr"); drawLines()
-  plotMA(DE_gene_totRNA_mock_vs_totRNA_UV_ashr, main="DE_gene_totRNA_mock_vs_totRNA_UV_ashr"); drawLines()
+  DESeq2::plotMA(DE_gene_totRNA_mock_vs_totRNA_arsenite_ashr, main="DE_gene_totRNA_mock_vs_totRNA_arsenite_ashr"); drawLines()
+  DESeq2::plotMA(DE_gene_totRNA_mock_vs_totRNA_NaCl_ashr, main="DE_gene_totRNA_mock_vs_totRNA_NaCl_ashr"); drawLines()
+  DESeq2::plotMA(DE_gene_totRNA_mock_vs_totRNA_HS_ashr, main="DE_gene_totRNA_mock_vs_totRNA_HS_ashr"); drawLines()
+  DESeq2::plotMA(DE_gene_totRNA_mock_vs_totRNA_UV_ashr, main="DE_gene_totRNA_mock_vs_totRNA_UV_ashr"); drawLines()
 #################Stopped here######################
 
 
@@ -302,16 +352,17 @@ drawLines <- function() abline(h=c(-2,2),col="dodgerblue",lwd=2)
 # 6. Extract the contrasts for genes sgRNA from filtered object
 ```{r, results_gene_sg, message=FALSE, warning=FALSE, echo=FALSE}
 
+## the conditions were reversed, to have UV as the first condition!
 ## B) GENE: We have 6 comparisons for sgRNA: dfmeta_all$condition[6]-dfmeta_all$condition[9]: all against all
 
-contrast_sg <- list(c("condition", levels(dfmeta_all$condition)[6], levels(dfmeta_all$condition)[7]), 
-                    c("condition", levels(dfmeta_all$condition)[6], levels(dfmeta_all$condition)[8]),
-                    c("condition", levels(dfmeta_all$condition)[6], levels(dfmeta_all$condition)[9]),
+contrast_sg <- list(c("condition", levels(dfmeta_all$condition)[7], levels(dfmeta_all$condition)[6]), 
+                    c("condition", levels(dfmeta_all$condition)[8], levels(dfmeta_all$condition)[6]),
+                    c("condition", levels(dfmeta_all$condition)[9], levels(dfmeta_all$condition)[6]),
                     
-                    c("condition", levels(dfmeta_all$condition)[7], levels(dfmeta_all$condition)[8]),
-                    c("condition", levels(dfmeta_all$condition)[7], levels(dfmeta_all$condition)[9]),
+                    c("condition", levels(dfmeta_all$condition)[8], levels(dfmeta_all$condition)[7]),
+                    c("condition", levels(dfmeta_all$condition)[9], levels(dfmeta_all$condition)[7]),
                     
-                    c("condition", levels(dfmeta_all$condition)[8], levels(dfmeta_all$condition)[9]))
+                    c("condition", levels(dfmeta_all$condition)[9], levels(dfmeta_all$condition)[8]))
 
 #these results have threshold for lfc at 0; filter further if wanting something like lfc=2
 for (a in contrast_sg){
@@ -332,28 +383,43 @@ for (a in contrast_sg){
 	assign(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort"),
 	       get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"))[order(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"))$padj),]
 	)
+	
+	# sort subset by lfc
+	assign(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05lfc_sort"),
+	       get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"))[order(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"))$log2FoldChange),]
+	)
+	
 	# write out files by adding a name for the rownames as well (it is 'tab' separated - not by space)
 	new_names <- c('gene_ID')
-	write.table(new_names, file = paste0(dfolder, "DE_gene_CIRIout/", "DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=FALSE, row.names=FALSE, quote = F, eol='\t') 
-	write.table(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort")), file = paste0(dfolder, "DE_gene_CIRIout/", "DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=TRUE, row.names=TRUE, sep = "\t", quote = F, append = TRUE) 
+	#write.table(new_names, file = paste0(dfolder, "DE_gene_CIRIout/", "DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=FALSE, row.names=FALSE, quote = F, eol='\t') 
+	#write.table(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort")), file = paste0(dfolder, "DE_gene_CIRIout/", "DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=TRUE, row.names=TRUE, sep = "\t", quote = F, append = TRUE) 
 	}
 
 
-  plotMA(DE_gene_sgRNA_arsenite_vs_sgRNA_HS_ashr, main="DE_gene_sgRNA_arsenite_vs_sgRNA_HS_ashr"); drawLines()
-  plotMA(DE_gene_sgRNA_arsenite_vs_sgRNA_NaCl_ashr, main="DE_gene_sgRNA_arsenite_vs_sgRNA_NaCl_ashr"); drawLines()
-  plotMA(DE_gene_sgRNA_arsenite_vs_sgRNA_UV_ashr, main="DE_gene_sgRNA_arsenite_vs_sgRNA_UV_ashr"); drawLines()
-  plotMA(DE_gene_sgRNA_HS_vs_sgRNA_NaCl_ashr, main="DE_gene_sgRNA_HS_vs_sgRNA_NaCl_ashr"); drawLines()
-  plotMA(DE_gene_sgRNA_HS_vs_sgRNA_UV, main="DE_gene_sgRNA_HS_vs_sgRNA_UV"); drawLines()
-  plotMA(DE_gene_sgRNA_NaCl_vs_sgRNA_UV_ashr, main="DE_gene_sgRNA_NaCl_vs_sgRNA_UV_ashr"); drawLines()
+  DESeq2::plotMA(DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr, main="DE_gene_sgRNA_arsenite_vs_sgRNA_HS_ashr"); drawLines()
+  DESeq2::plotMA(DE_gene_sgRNA_NaCl_vs_sgRNA_arsenite_ashr, main="DE_gene_sgRNA_arsenite_vs_sgRNA_NaCl_ashr"); drawLines()
+  DESeq2::plotMA(DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr, main="DE_gene_sgRNA_arsenite_vs_sgRNA_UV_ashr"); drawLines()
+  DESeq2::plotMA(DE_gene_sgRNA_NaCl_vs_sgRNA_HS_ashr, main="DE_gene_sgRNA_HS_vs_sgRNA_NaCl_ashr"); drawLines()
+  DESeq2::plotMA(DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr, main="DE_gene_sgRNA_HS_vs_sgRNA_UV"); drawLines()
+  DESeq2::plotMA(DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr, main="DE_gene_sgRNA_NaCl_vs_sgRNA_UV_ashr"); drawLines()
 ```
 
 The samples in the gene totRNA where samples are compared to totRNA_UV, they have larger log2FoldChanges than the rest.
+
+
+
+
+
+
+
 
 
 # 7. Extract the contrasts for transcripts totRNA from filtered object
 
 ```{r, results_trans_tot, message=FALSE, warning=FALSE, echo=FALSE}
 ## C) TRANSCR: We have 4 comparisons for totalRNA: dfmeta_all$condition[1] vs dfmeta_all$condition[2]-[5]
+### THERE IS AN ISSUE HERE: IF YOU RUN THIS STEP MANUALLY, IT WORKS. IT FAILS IF RUN WITHIN THE WHOLE SCRIPT. 
+### IT IS AS IF IT DOESN'T WAIT FOR THE PREVIOUS FUNCTIONS TO RUN
 
 #these results have threshold for lfc at 0; filter further if wanting something like lfc=2
 for (a in contrast_tot){
@@ -376,14 +442,14 @@ for (a in contrast_tot){
 	)
 	# write out files by adding a name for the rownames as well (it is 'tab' separated - not by space)
 	new_names <- c('transcript_ID')
-	write.table(new_names, file = paste0(dfolder, "DE_transcript_CIRIout/", "DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=FALSE, row.names=FALSE, quote = F, eol='\t') 
-	write.table(get(paste0("DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort")), file = paste0(dfolder, "DE_transcript_CIRIout/", "DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=TRUE, row.names=TRUE, sep = "\t", quote = F, append = TRUE) 
+	#write.table(new_names, file = paste0(dfolder, "DE_transcript_CIRIout/", "DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=FALSE, row.names=FALSE, quote = F, eol='\t') 
+	#write.table(get(paste0("DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort")), file = paste0(dfolder, "DE_transcript_CIRIout/", "DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=TRUE, row.names=TRUE, sep = "\t", quote = F, append = TRUE) 
 }
 
-  plotMA(DE_trans_totRNA_mock_vs_totRNA_arsenite_ashr, main="DE_trans_totRNA_mock_vs_totRNA_arsenite_ashr"); drawLines()
-  plotMA(DE_trans_totRNA_mock_vs_totRNA_NaCl_ashr, main="DE_trans_totRNA_mock_vs_totRNA_NaCl_ashr"); drawLines()
-  plotMA(DE_trans_totRNA_mock_vs_totRNA_HS_ashr, main="DE_trans_totRNA_mock_vs_totRNA_HS_ashr"); drawLines()
-  plotMA(DE_trans_totRNA_mock_vs_totRNA_UV_ashr, main="DE_trans_totRNA_mock_vs_totRNA_UV_ashr"); drawLines()
+  DESeq2::plotMA(DE_trans_totRNA_mock_vs_totRNA_arsenite_ashr, main="DE_trans_totRNA_mock_vs_totRNA_arsenite_ashr"); drawLines()
+  DESeq2::plotMA(DE_trans_totRNA_mock_vs_totRNA_NaCl_ashr, main="DE_trans_totRNA_mock_vs_totRNA_NaCl_ashr"); drawLines()
+  DESeq2::plotMA(DE_trans_totRNA_mock_vs_totRNA_HS_ashr, main="DE_trans_totRNA_mock_vs_totRNA_HS_ashr"); drawLines()
+  DESeq2::plotMA(DE_trans_totRNA_mock_vs_totRNA_UV_ashr, main="DE_trans_totRNA_mock_vs_totRNA_UV_ashr"); drawLines()
 ```
 
 
@@ -422,17 +488,17 @@ for (a in contrast_sg){
 	)
 	# write out files by adding a name for the rownames as well (it is 'tab' separated - not by space)
 	new_names <- c('transcript_ID')
-	write.table(new_names, file = paste0(dfolder, "DE_transcript_CIRIout/", "DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=FALSE, row.names=FALSE, quote = F, eol='\t') 
-	write.table(get(paste0("DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort")), file = paste0(dfolder, "DE_transcript_CIRIout/", "DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=TRUE, row.names=TRUE, sep = "\t", quote = F, append = TRUE) 
+	#write.table(new_names, file = paste0(dfolder, "DE_transcript_CIRIout/", "DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=FALSE, row.names=FALSE, quote = F, eol='\t') 
+	#write.table(get(paste0("DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort")), file = paste0(dfolder, "DE_transcript_CIRIout/", "DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=TRUE, row.names=TRUE, sep = "\t", quote = F, append = TRUE) 
 	}
 
 
-  plotMA(DE_trans_sgRNA_arsenite_vs_sgRNA_HS_ashr, main="DE_trans_sgRNA_arsenite_vs_sgRNA_HS_ashr"); drawLines()
-  plotMA(DE_trans_sgRNA_arsenite_vs_sgRNA_NaCl_ashr, main="DE_trans_sgRNA_arsenite_vs_sgRNA_NaCl_ashr"); drawLines()
-  plotMA(DE_trans_sgRNA_arsenite_vs_sgRNA_UV_ashr, main="DE_trans_sgRNA_arsenite_vs_sgRNA_UV_ashr"); drawLines()
-  plotMA(DE_trans_sgRNA_HS_vs_sgRNA_NaCl_ashr, main="DE_trans_sgRNA_HS_vs_sgRNA_NaCl_ashr"); drawLines()
-  plotMA(DE_trans_sgRNA_HS_vs_sgRNA_UV, main="DE_trans_sgRNA_HS_vs_sgRNA_UV"); drawLines()
-  plotMA(DE_trans_sgRNA_NaCl_vs_sgRNA_UV_ashr, main="DE_trans_sgRNA_NaCl_vs_sgRNA_UV_ashr"); drawLines()
+  DESeq2::plotMA(DE_trans_sgRNA_arsenite_vs_sgRNA_HS_ashr, main="DE_trans_sgRNA_arsenite_vs_sgRNA_HS_ashr"); drawLines()
+  DESeq2::plotMA(DE_trans_sgRNA_arsenite_vs_sgRNA_NaCl_ashr, main="DE_trans_sgRNA_arsenite_vs_sgRNA_NaCl_ashr"); drawLines()
+  DESeq2::plotMA(DE_trans_sgRNA_arsenite_vs_sgRNA_UV_ashr, main="DE_trans_sgRNA_arsenite_vs_sgRNA_UV_ashr"); drawLines()
+  DESeq2::plotMA(DE_trans_sgRNA_HS_vs_sgRNA_NaCl_ashr, main="DE_trans_sgRNA_HS_vs_sgRNA_NaCl_ashr"); drawLines()
+  DESeq2::plotMA(DE_trans_sgRNA_HS_vs_sgRNA_UV, main="DE_trans_sgRNA_HS_vs_sgRNA_UV"); drawLines()
+  DESeq2::plotMA(DE_trans_sgRNA_NaCl_vs_sgRNA_UV_ashr, main="DE_trans_sgRNA_NaCl_vs_sgRNA_UV_ashr"); drawLines()
 ```
 
 The samples in the transcript sgRNA have very large log2FoldChanges.
@@ -468,3 +534,242 @@ pheatmap(sampleDistMatrix_gene, color = colours, display_numbers = TRUE,
 ```
 
 The sgRNA_UV sample group is isolated from the other sgRNA samples = the content of this sample group is distinct from the other sgRNA samples.
+
+
+# 10. Make custom MA plots for some of the SG datasets
+
+```{r, MA_plots-sameYaxis}
+# png("./MA_CIRI2_plot_revUV.png", width=850, height=475, units = "px", bg = "white")
+# 
+# list_objects <- list('DE_gene_sgRNA_UV_vs_sgRNA_ars', 'DE_gene_sgRNA_UV_vs_sgRNA_HS', 'DE_gene_sgRNA_UV_vs_sgRNA_NaCl', 'DE_gene_sgRNA_HS_vs_sgRNA_ars')
+# list_data <- list(DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr, DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr, DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr, DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr)
+# 
+# 
+# par(oma = c(3,4,4,1),    # margins for whole plot
+#     mar = c(2,3,2.2,2)  # margins for individual plots
+#     )
+# 
+# yl <- c(-6,6)
+# 
+# layout(matrix(c(1, 2, 3, 4), 2, 2, byrow=TRUE))
+# # layout.show(6)
+# options(scipen=0) # to get scientific notation; the higher, the less the probability of lossing scientific notation
+# 
+# for (i in 1:length(list_objects) ) {
+#   DESeq2::plotMA(list_data[[i]], ylim=yl, alpha=0.01, main=list_objects[[i]] , xlab='', ylab='', colSig='red',
+#                  cex.axis=1, cex.main=1)
+#   abline(h=c(-1,1),col="dodgerblue",lwd=2)
+#   }
+# 
+# title(main = paste0("MA plots for DE analysis, alpha=0.01"),
+#       xlab = "Mean expression",
+#       ylab = "Log fold change",
+#       outer = TRUE, line = 1,
+#       cex.lab=1.5, cex.main=1.5)
+# 
+# dev.off()
+```
+
+
+
+# 11. Custom MA plots for some of the SG datasets, with genes extracted from the intron-exon analysis (eisa)
+
+```{r, function_modifMA}
+##############################
+#ORIG
+# my_plot <- function( object, ylim = NULL,
+#                      colNonSig = "gray32", colSig = "red3", colLine = "#ff000080", colEmph = "blue",
+#                      log = "x", cex=0.45, xlab="mean expression", ylab="log fold change", ... ) {
+#   if( !( ncol(object) == 3 & inherits( object[[1]], "numeric" ) & inherits( object[[2]], "numeric" )
+#          & inherits( object[[3]], "logical" ) ) ) {
+#     stop( "When called with a data.frame, plotMA expects the data frame to have 3 columns, two numeric ones for mean and log fold change, and a logical one for significance.")
+#    }
+#   colnames(object) <- c( "mean", "lfc", "sig" )
+#   object = subset( object, mean != 0 )
+#   py = object$lfc
+#   
+#   if( is.null(ylim) )
+#     ylim = c(-1,1) * quantile(abs(py[is.finite(py)]), probs=0.99) * 1.1
+#    
+#   plot(object$mean, pmax(ylim[1], pmin(ylim[2], py)),
+#        log=log, pch=ifelse(py<ylim[1], 6, ifelse(py>ylim[2], 2, 16)),   # down-triangle (6) if smaller than ylim[1], up-triangle (2) if larger than ylim[2]; else just circles (16)
+#        cex=cex, col=ifelse( object$sig, colSig, colNonSig ), xlab=xlab, ylab=ylab, ylim=ylim, ...)
+#   abline( h=0, lwd=4, col=colLine )
+# }
+##############################################
+
+# modified code from the github of the DESeq2 repo (?)
+f.MAplot_geneList <- function( object, ylim = NULL,
+                     colNonSig = "gray78", colSig = "gray53", colLine = "pink", colEmph = "red", colAmbig= "blue",
+                     log = "x", cex=0.45, xlab="mean expression", ylab="log fold change", ... )
+  {if( !( ncol(object) == 4 & inherits( object[[1]], "numeric" ) & inherits( object[[2]], "numeric" )
+         & inherits( object[[3]], "logical" ) & inherits( object[[4]], "logical" )) )
+
+    {stop( "When called with a data.frame, plotMA expects the data frame to have 3 columns, two numeric ones for mean and log fold change, and a logical one for significance.")
+    }
+
+  colnames(object) <- c( "mean", "lfc", "sig", "belong" )
+  object = subset( object, mean != 0 )
+  py = object$lfc
+
+  if( is.null(ylim) )
+    ylim = c(-1,1) * quantile(abs(py[is.finite(py)]), probs=0.99) * 1.1
+
+  plot(object$mean, pmax(ylim[1], pmin(ylim[2], py)),
+       log=log, pch=ifelse(py<ylim[1], 6, ifelse(py>ylim[2], 2, 16)),   # down-triangle (6) if smaller than ylim[1], up-triangle (2) if larger than ylim[2]; else just circles (16)
+       cex=cex, 
+       #col=ifelse( object$sig & object$belong, colEmph, ifelse(object$sign == FALSE & object$belong, colAmbig, ifelse(object$sign & object$belong == FALSE, colSig, colNonSig)) ),
+       #col=ifelse(object$sig & object$belong, colEmph, ifelse(object$belong, colAmbig, colNonSig) ),   # only the top2000 circRNA genes
+       col=ifelse(object$sig ==TRUE & object$belong ==TRUE, colEmph, ifelse(object$sig==FALSE & object$belong==TRUE, colAmbig, ifelse(object$sig==TRUE & object$belong==FALSE, colSig, colNonSig)) ),
+       xlab=xlab, ylab=ylab, ylim=ylim, ...)
+  abline( h=0, lwd=4, col=colLine )
+  }
+############################################
+```
+
+
+
+```{r, MA_plots-sameYaxis-eisaGenes}
+### Done by hand - go back to the beginning and make this standardized, easier
+
+# import the data with top 2000 genes from the eisa analysis
+path_orig <- "/data/manke/processing/balan/Yilong_SG_data/2022.03_DE_genes_transcript/intron_analysis_bam"
+
+
+#DON'T CHANGE THE ORDER OF THE OBJECTS!!!
+
+list_objects=list(#"totRNA_ars_vs_mock", "totRNA_HS_vs_mock", "totRNA_NaCl_vs_mock", "totRNA_UV_vs_mock",
+                   "sgRNA_HS_vs_ars", "sgRNA_NaCl_vs_ars", "sgRNA_UV_vs_ars",
+                   "sgRNA_NaCl_vs_HS", "sgRNA_UV_vs_HS",
+                   "sgRNA_UV_vs_NaCl")
+
+list_data <- list(#
+                "DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr", "DE_gene_sgRNA_NaCl_vs_sgRNA_arsenite_ashr", "DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr",
+                "DE_gene_sgRNA_NaCl_vs_sgRNA_HS_ashr", "DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr", 
+                "DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr")
+
+
+for (i in 1:length(list_objects) ) {
+  assign(paste0("top2000_", list_objects[[i]]), read.delim(paste0(path_orig, "/top2000_", list_objects[[i]], '.tsv'), header = TRUE, sep='\t', na.strings="NA", row.names = 1, stringsAsFactors = F) )
+  }
+
+  DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr$listGenes <- rownames(DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr) %in% rownames(top2000_sgRNA_HS_vs_ars)
+  DE_gene_sgRNA_NaCl_vs_sgRNA_arsenite_ashr$listGenes <- rownames(DE_gene_sgRNA_NaCl_vs_sgRNA_arsenite_ashr) %in% rownames(top2000_sgRNA_NaCl_vs_ars)
+  DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr$listGenes <- rownames(DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr) %in% rownames(top2000_sgRNA_UV_vs_ars)
+   
+  DE_gene_sgRNA_NaCl_vs_sgRNA_HS_ashr$listGenes <- rownames(DE_gene_sgRNA_NaCl_vs_sgRNA_HS_ashr) %in% rownames(top2000_sgRNA_NaCl_vs_HS)
+  DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr$listGenes <- rownames(DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr) %in% rownames(top2000_sgRNA_UV_vs_HS)
+     
+  DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr$listGenes <- rownames(DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr) %in% rownames(top2000_sgRNA_UV_vs_NaCl)
+############################################
+  
+  #doesn't work
+  #assign(get(list_data[[2]])$listGenes, rownames(list_data[[2]]) %in% rownames(list_objects[[2]]) )
+############################################
+  
+  DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr$padj <- DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr$padj < 0.05
+  DE_gene_sgRNA_NaCl_vs_sgRNA_arsenite_ashr$padj <- DE_gene_sgRNA_NaCl_vs_sgRNA_arsenite_ashr$padj < 0.05
+  DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr$padj <- DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr$padj < 0.05
+   
+  DE_gene_sgRNA_NaCl_vs_sgRNA_HS_ashr$padj <- DE_gene_sgRNA_NaCl_vs_sgRNA_HS_ashr$padj < 0.05
+  DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr$padj <- DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr$padj < 0.05
+     
+  DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr$padj <- DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr$padj < 0.05
+############################################
+
+  DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr <- DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr[c(1,2,5,6)]
+  DE_gene_sgRNA_NaCl_vs_sgRNA_arsenite_ashr <- DE_gene_sgRNA_NaCl_vs_sgRNA_arsenite_ashr[c(1,2,5,6)]
+  DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr <- DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr[c(1,2,5,6)]
+
+  DE_gene_sgRNA_NaCl_vs_sgRNA_HS_ashr <- DE_gene_sgRNA_NaCl_vs_sgRNA_HS_ashr[c(1,2,5,6)]
+  DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr <- DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr[c(1,2,5,6)]
+
+  DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr <- DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr[c(1,2,5,6)]
+################################
+```
+
+
+```{r, MAmodif_plot}
+# png("./MA_CIRI2_plot_revUV_genesEISA.png", width=850, height=475, units = "px", bg = "white")
+# # 
+# list_toPlot <- list("DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr", "DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr", 
+#                     "DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr", "DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr")
+# 
+# 
+# par(oma = c(3,4,4,1),    # margins for whole plot
+#      mar = c(2,3,2.2,2)  # margins for individual plots
+#     )
+# 
+# yl <- c(-6,6)
+# 
+#  layout(matrix(c(1, 2, 3, 4), 2, 2, byrow=TRUE))
+# # # layout.show(6)
+# # options(scipen=0) # to get scientific notation; the higher, the less the probability of losing scientific notation
+# 
+# for (i in 1:length(list_toPlot) ) {
+#   f.MAplot_geneList(get(list_toPlot[[i]]), ylim=yl, 
+#           main=list_toPlot[[i]] , xlab='', ylab='',
+#                  cex.axis=1, cex.main=1
+#           )
+#   abline(h=c(-1,1),col="dodgerblue",lwd=2)
+#   }
+# 
+# title(main = paste0("MA plots for DE analysis, alpha=0.01"),
+#       xlab = "Mean expression",
+#       ylab = "Log fold change",
+#       outer = TRUE, line = 1,
+#       cex.lab=1.5, cex.main=1.5)
+# ################################################
+# 
+# dev.off()
+```
+
+
+
+```{r, extract-RDIgenes}
+# extract top 2000 genes from each comparison 
+
+list_toExtract <- list("DE_gene_sgRNA_UV_vs_sgRNA_arsenite", "DE_gene_sgRNA_UV_vs_sgRNA_HS", 
+                     "DE_gene_sgRNA_UV_vs_sgRNA_NaCl", "DE_gene_sgRNA_HS_vs_sgRNA_arsenite")
+
+for (i in 1:length(list_toExtract) ) {
+  assign(paste0("top2000_", list_toExtract[[i]],"lfc"), get(paste0(list_toExtract[[i]],"_padj0.05lfc_sort"))[1:2000,]) 
+  #write.table(get(paste0("top2000_", list_toExtract[[i]], "lfc")), file=paste0(path_orig, '/intron_analysis_bam/', "top2000_", list_toExtract[[i]], "_padj0.05lfc_sort", '.tsv'), sep="\t", row.names=TRUE, quote = FALSE)
+}
+
+```
+
+
+
+
+```{r, intron_DE}
+path_inDir <- "/data/manke/processing/balan/Yilong_SG_data/2022.03_DE_genes_transcript"
+
+counts_intron_noNeg <- read.delim(paste0(path_inDir, '/intron_analysis_bam/', 'counts_introns_from_featureCounts_noNeg.tsv'), header = TRUE, sep='\t', na.strings="NA", row.names = 1, stringsAsFactors = F)
+
+
+#check if the col and rows are in the same order:
+#all(rownames(dfmeta_all) == colnames(dfcounts_gene))   ## > FALSE
+all(rownames(dfmeta_all) == colnames(counts_intron_noNeg[,rownames(dfmeta_all)]))
+
+#make dds obj - AND rearrange the columns from the counts df to correspond to the ones in the metadata
+dds_batch_intron <- DESeq2::DESeqDataSetFromMatrix(countData = counts_intron_noNeg[,rownames(dfmeta_all)], colData = dfmeta_all, design = design_batch)
+
+rld_PCA_intron <- plotPCA(rlog(dds_batch_intron, blind = TRUE), intgroup=c("batch", "condition"), returnData=TRUE)
+
+percentVar <- round(100 * attr(rld_PCA_intron, "percentVar"), 1)   # rounded values for each axis of PC variance
+
+ggplot(rld_PCA_intron, aes(PC1, PC2, color=condition, shape=batch)) +
+  geom_point(size=3) +
+  scale_shape_manual(values=c(3, 1, 2))+    # change shapes of symbols
+  scale_size_manual(values=c(8, 8, 8))+     # change sizes of symbols
+  xlab(paste0("PC1: ",percentVar[1])) +
+  ylab(paste0("PC2: ",percentVar[2]))
+```
+
+
+
+
+```{r, Run DESeq}
+res_batch_intron <- DESeq2::DESeq(dds_batch_intron)
+# plotDispEsts(dds_batch_gene)

@@ -1,0 +1,493 @@
+---
+title: "2218_Yilong_mRNA_stressGranules_DESeq2"
+output: html_notebook
+toc: true
+---
+
+## Sample sheet
+
+sample name     note    Barcode note-1
+1       total RNA of mock-1     22L005998       collected at 20200215
+2       total RNA of mock-2     22L005999       collected at 20200215
+3       total RNA of mock-3     22L006000       collected at 20200218
+4       total RNA of arsenite-1 22L006001       collected at 20200215
+5       total RNA of arsenite-2 22L006002       collected at 20200218
+6       total RNA of arsenite-3 22L006003       collected at 20200218
+7       total RNA of HS-1       22L006004       collected at 20200218
+8       total RNA of HS-2       22L006005       collected at 20200218
+9       total RNA of HS-3       22L006006       collected at 20200218
+10      total RNA of NaCl-1     22L006007       collected at 20200215
+11      total RNA of NaCl-2     22L006008       collected at 20200218
+12      total RNA of NaCl-3     22L006009       collected at 20200218
+13      total RNA of 4sUV-1     22L006010       collected at 20200215
+14      total RNA of 4sUV-2     22L006011       collected at 20200215
+15      total RNA of 4sUV-3     22L006012       collected at 20200218
+16      SG RNA of arsenite-1    22L006013       collected at 20200215
+17      SG RNA of arsenite-2    22L006014       collected at 20200218
+18      SG RNA of arsenite-3    22L006015       collected at 20200218
+19      SG RNA of HS-1  22L006016       collected at 20200218
+20      SG RNA of HS-2  22L006017       collected at 20200218
+21      SG RNA of HS-3  22L006018       collected at 20200218
+22      SG RNA of  NaCl-1       22L006019       collected at 20200215
+23      SG RNA of  NaCl-2       22L006020       collected at 20200218
+24      SG RNA of  NaCl-3       22L006021       collected at 20200218
+25      SG RNA of UV-1  22L006022       collected at 20200215
+26      SG RNA of UV-2  22L006023       collected at 20200215
+27      SG RNA of UV-3  22L006024       collected at 20200218
+
+This is a more shrunk down form of 2218_Zhou_eisaR_fromCounts_fC.
+
+```{r, install-libraries}
+##if (!requireNamespace("BiocManager", quietly = TRUE))
+##	install.packages("BiocManager")
+
+# BiocManager::install("eisaR")
+# BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")   # see 'annotation' to figure out which object you need
+# BiocManager::install("gtools")
+##BiocManager::install(c("ensembldb", "apeglm", "ashr"))
+```
+
+```{r, load-libraries}
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(eisaR))
+#suppressPackageStartupMessages(library(GenomicFeatures))
+suppressPackageStartupMessages(library(TxDb.Hsapiens.UCSC.hg38.knownGene))  # geneID to symbol conversion and for annotation
+suppressPackageStartupMessages(library(gtools))            # to do alphanumeric sort on column names (+ stringAsFactors=F)
+#suppressPackageStartupMessages(library(ensembldb))
+suppressPackageStartupMessages(library(edgeR))
+```
+
+
+Load exon data and genebody (intron+exon) data.
+
+```{r, load-count-data}
+# # create the sample sheet for paired-end sequencing:
+path_inDir <- "/data/manke/processing/balan/Yilong_SG_data/2022.03_DE_genes_transcript"
+counts_geneBody <- read.delim(paste0(path_inDir, "/analysis_bam_default/", "featureCounts_geneBody_fO/counts.tsv"), header = TRUE, sep='\t', na.strings="NA", row.names = 1, stringsAsFactors = F)
+counts_exon <- read.delim(paste0(path_inDir, "/analysis_bam_default/", "featureCounts_exon_fO/counts.tsv"), header = TRUE, sep='\t', na.strings="NA", row.names = 1, stringsAsFactors = F)
+
+## alphanumeric sort of columns
+counts_geneBody <- counts_geneBody[,gtools::mixedorder(colnames(counts_geneBody))]
+counts_exon <- counts_exon[,gtools::mixedorder(colnames(counts_exon))]
+
+##remove the version nr after each accession number (e.g. "ENSG00000278267.1" to "ENSG00000278267")
+  #why doesn't this work?
+    #row.names(counts_geneBody) <- gsub("\\..*","",row.names(counts_geneBody))  
+    # this would work but I don't understand what is happening:
+      # row.names(counts_geneBody) <- make.names(gsub("\\..*","",row.names(counts_geneBody)), unique=TRUE )
+  
+  # apparently this creates non-unique row names; how many?
+    #table(duplicated(gsub("\\..*","",row.names(counts_geneBody))))   
+  # I get 45 gene IDs that will become non-unique if I do it this way; which ones? 
+    #row.names(counts_geneBody)[duplicated(gsub("\\..*","",row.names(counts_geneBody)))]   
+  # all have '_PAR_Y' suffix. Check one of the names:
+    #row.names(counts_geneBody[grepl(pattern="ENSG00000169100", row.names(counts_geneBody) ),])
+      #  "ENSG00000169100.13"       "ENSG00000169100.13_PAR_Y"   
+  # are sequences from Y chromosome and they seem empty
+      # all(counts_geneBody[grepl(pattern="_PAR_Y", row.names(counts_geneBody) ),] == 0)    # TRUE
+  # are all empty in the 'counts_exon' too?
+      # all(counts_exon[grepl(pattern="_PAR_Y", row.names(counts_exon) ),] == 0)            # TRUE
+
+## NOTES:
+  # Since by normal definitions there is no Y chromosome in female tissue, PAR_Y quantifications should be ignored (excluding special cases such as intersex syndrome).
+  # In male, however, I would suggest making the sum of counts for the X and PAR_Y transcripts. Since alternative splicing may generate different variants of the same "Ensembl-ID" transcript, quantification should account for the total of the isoforms.  
+  
+  # remove the all the '_PAR_Y' rows because are empty
+less_counts_geneBody <- counts_geneBody[!row.names(counts_geneBody) %in% row.names(counts_geneBody[grepl(pattern="_PAR_Y", row.names(counts_geneBody) ),]),]
+less_counts_exon <- counts_exon[!row.names(counts_exon) %in% row.names(counts_exon[grepl(pattern="_PAR_Y", row.names(counts_exon) ),]),]
+
+  # remove the version number
+  row.names(less_counts_geneBody) <- gsub("\\..*","",row.names(less_counts_geneBody))
+  row.names(less_counts_exon) <- gsub("\\..*","", row.names(less_counts_exon))
+```
+
+Get intron counts:
+
+```{r, intron-counts}
+counts_introns = less_counts_geneBody - less_counts_exon
+write.table(counts_introns, file=paste0(path_inDir, '/intron_analysis_bam/', 'counts_introns_from_featureCounts.tsv'), sep="\t", row.names=TRUE)
+
+head(counts_introns)
+
+# create condition factors
+treat <- factor(c(rep("totRNA_mock", 3), rep("totRNA_arsenite", 3), rep("totRNA_HS", 3), rep("totRNA_NaCl", 3), rep("totRNA_UV", 3), 
+                       rep("sgRNA_arsenite", 3), rep("sgRNA_HS", 3), rep("sgRNA_NaCl", 3), rep("sgRNA_UV", 3)) )
+```
+
+
+```{r, sanity-check-values, eval=FALSE, include=FALSE}
+# #sanity checks only for s1 sample:
+# #counts_exon[counts_geneBody$s1 == 0,]["ENSG00000278267.1",]
+# #dplyr::filter(counts_geneBody,counts_geneBody$s1==0 & counts_exon$s1 != 0)["ENSG00000278267.1",]
+# 
+# s1_counts_to_zero_in_geneBody <- dplyr::filter(counts_exon,counts_geneBody$s1 == 0 & counts_exon$s1 != 0) # 3 387
+# #s1_genes_to_zero_in_geneBody <- row.names(s1_counts_to_zero_in_geneBody)
+# 
+# s1_counts_less_in_geneBody_than_exon <- dplyr::filter(counts_exon,counts_geneBody$s1 < counts_exon$s1)        # 3 807
+# #s1_genes_less_in_geneBody_than_exon <- row.names(s1_counts_less_in_geneBody_than_exon)
+# 
+# #sort(s1_counts_to_zero_in_geneBody$s1, decreasing = TRUE)
+#   #  [1] 78384  4028  3280  2150  2149  2136  2013  1962  1849  1811  1690  1627  1624 
+# s1_counts_to_zero_in_geneBody_sort <- s1_counts_to_zero_in_geneBody[order(s1_counts_to_zero_in_geneBody$s1, decreasing=TRUE),]
+# s1_counts_less_in_geneBody_than_exon_sort <- s1_counts_less_in_geneBody_than_exon[order(s1_counts_less_in_geneBody_than_exon$s1, decreasing=TRUE),]
+# 
+# #remove the version nr after each accession number (e.g. "ENSG00000278267.1" to "ENSG00000278267")
+# row.names(s1_counts_to_zero_in_geneBody_sort) <- gsub("\\..*","",row.names(s1_counts_to_zero_in_geneBody_sort))
+# row.names(s1_counts_less_in_geneBody_than_exon_sort) <- gsub("\\..*","", row.names(s1_counts_less_in_geneBody_than_exon_sort))
+# 
+# # Convert from ensembl.gene to gene.symbol   
+# #keytypes(TxDb.Hsapiens.UCSC.hg38.knownGene)      -doesn't work
+# #ENTREZID_TxDb <- keys(TxDb.Hsapiens.UCSC.hg38.knownGene, keytype = "GENEID")
+# 
+# # works
+# #BiocManager::install("EnsDb.Hsapiens.v86")
+# #suppressPackageStartupMessages(library(EnsDb.Hsapiens.v86))
+# #supportedFilters(EnsDb.Hsapiens.v86)
+# 
+# s1_genes_to_zero_in_geneBody_sort <- ensembldb::select(EnsDb.Hsapiens.v86, keys=row.names(s1_counts_to_zero_in_geneBody_sort), keytype = "GENEID", columns = c("SYMBOL","GENEID"))
+# s1_genes_less_in_geneBody_than_exon_sort <- ensembldb::select(EnsDb.Hsapiens.v86, keys=row.names(s1_counts_less_in_geneBody_than_exon_sort), keytype = "GENEID", columns = c("SYMBOL","GENEID"))
+# 
+# # the opposite: Convert from gene.symbol to ensembl.gene
+# #geneID_s1_to_zero <- ensembldb::select(EnsDb.Hsapiens.v86, keys=geneSymbol_s1_to_zero$SYMBOL, keytype = "SYMBOL", columns = c("SYMBOL","GENEID"))
+# 
+# write.table(s1_genes_to_zero_in_geneBody_sort$SYMBOL, file=paste0(path_inDir, '/intron_analysis_bam/', 'geneSymbol_s1_to_zero'), sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
+# write.table(s1_genes_less_in_geneBody_than_exon_sort$SYMBOL, file=paste0(path_inDir, '/intron_analysis_bam/', 'geneSymbol_s1_less'), sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
+#####################################
+```
+
+```{r, get-intron-counts-and-set-neg-to-zero}
+# # function for looking at genes that have a exon count > geneBody count: (NOT FINISHED-not needed)
+# 
+# for (a in 1:length(colnames(counts_geneBody))){
+#   assign(
+#     paste0(colnames(counts_geneBody[1]),"_counts_to_less_in_geneBody_than_exon"), 
+#     dplyr::filter(counts_exon, counts_geneBody[1] < counts_exon[1]) )
+#   assign(
+#     paste0(colnames(counts_geneBody[1]),"_counts_to_less_in_geneBody_than_exon_sort"), 
+#     get(paste0(colnames(counts_geneBody[1]),"_counts_to_less_in_geneBody_than_exon"))[order(get(paste0(colnames(counts_geneBody[1]),"_counts_to_less_in_geneBody_than_exon")), decreasing=TRUE),]  )
+#   }
+# 
+# row.names(paste0(colnames(counts_geneBody),"_counts_to_less_in_geneBody_than_exon_sort")) <- gsub("\\..*","", row.names(paste0(colnames(counts_geneBody),"_counts_to_less_in_geneBody_than_exon_sort")))  
+# 
+# write.table(paste0(colnames(counts_geneBody),"_counts_to_less_in_geneBody_than_exon_sort"), file=paste0(path_inDir, '/intron_analysis_bam/', 'intron_count_from_featureCounts'), sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
+```
+
+Eisa doesn't work with negative values. So in this 1st attempt, set all negative values to zero.
+
+```{r, fix-the-negative-values}
+counts_introns[counts_introns<0] <- 0
+write.table(counts_introns, file=paste0(path_inDir, '/intron_analysis_bam/', 'counts_introns_from_featureCounts_noNeg.tsv'), sep="\t", row.names=TRUE)
+```
+
+
+
+# run EISA
+```{r, eisa-totalRNA}
+# # it works only on 2 levels at a time!
+# with modelSamples
+res_totRNA_mock_vs_ars <- runEISA(   less_counts_exon[c(1:3,4:6)], counts_introns[c(1:3,4:6)], droplevels(treat[c(1:3,4:6)])  )   # drops unused factor levels because EISA only takes 2 at a time
+res_totRNA_mock_vs_HS <- runEISA(   less_counts_exon[c(1:3,7:9)], counts_introns[c(1:3,7:9)], droplevels(treat[c(1:3,7:9)])  )   
+res_totRNA_mock_vs_NaCl <- runEISA(   less_counts_exon[c(1:3,10:12)], counts_introns[c(1:3,10:12)], droplevels(treat[c(1:3,10:12)])  )   
+res_totRNA_mock_vs_UV <- runEISA(   less_counts_exon[c(1:3,13:15)], counts_introns[c(1:3,13:15)], droplevels(treat[c(1:3,13:15)])  )   
+```
+```{r, eisa-sgRNA}
+# with modelSamples
+res_sgRNA_ars_vs_HS <- runEISA(   less_counts_exon[c(16:18,19:21)], counts_introns[c(16:18,19:21)], droplevels(treat[c(16:18,19:21)])  )
+res_sgRNA_ars_vs_NaCl <- runEISA(   less_counts_exon[c(16:18,22:24)], counts_introns[c(16:18,22:24)], droplevels(treat[c(16:18,22:24)])  )   
+res_sgRNA_ars_vs_UV <- runEISA(   less_counts_exon[c(16:18,25:27)], counts_introns[c(16:18,25:27)], droplevels(treat[c(16:18,25:27)])  )   
+
+res_sgRNA_HS_vs_NaCl <- runEISA(   less_counts_exon[c(19:21,22:24)], counts_introns[c(19:21,22:24)], droplevels(treat[c(19:21,22:24)])  )   
+res_sgRNA_HS_vs_UV <- runEISA(   less_counts_exon[c(19:21,25:27)], counts_introns[c(19:21,25:27)], droplevels(treat[c(19:21,25:27)])  )   
+
+res_sgRNA_NaCl_vs_UV <- runEISA(   less_counts_exon[c(22:24,25:27)], counts_introns[c(22:24,25:27)], droplevels(treat[c(22:24,25:27)])  )   
+```
+
+
+# run plotEISA
+```{r, plotEISA-totalRNA}
+# png(paste0(path_inDir, '/intron_analysis_bam/totRNA_comparisons/','eisa_plot_totRNA_LFC.png'), width=1600, height=800, units = "px", bg = "white")
+# 
+# par(oma = c(3,4,4,1),    # margins for whole plot
+#     mar = c(3,4,3.2,1)  # margins for individual plots
+#     ) 
+# 
+# xl <- c(-10,10)
+# yl <- c(-8,8)
+#  
+# layout(matrix(c(1, 2, 3, 4), 2, 2, byrow=TRUE))
+# # layout.show(6)
+# 
+# list_objects=list("res_totRNA_mock_vs_ars", "res_totRNA_mock_vs_HS", "res_totRNA_mock_vs_NaCl", "res_totRNA_mock_vs_UV")
+#   
+#   
+# for (i in 1:length(list_objects) ) {
+#   eisaR::plotEISA(get(list_objects[[i]]), maxFDR = 0.05, #minLfc = 2,
+#                   xlim=xl, ylim=yl,  
+#                   main=list_objects[[i]] , xlab='', ylab='', 
+#                   cex.axis=1.5, cex.main=1.5)
+# }
+# 
+# title(main = "EISA - totRNA_intron-exon analysis, FDR < 0.05, LFC > 2",
+#       xlab = expression(paste(Delta,'intron (cond1-cond2)')),
+#       ylab = expression(paste(Delta,'exon (cond1-cond2)')),
+#       outer = TRUE, line = 1,
+#       cex.lab=2, cex.main=2)
+# 
+# dev.off()
+```
+```{r, ploEISA-sgRNA}
+# png(paste0(path_inDir, '/intron_analysis_bam/sgRNA_comparisons/','eisa_plot_sgRNA_LFC.png'), width=1600, height=800, units = "px", bg = "white")
+# 
+# par(oma = c(3,4,4,1),    # margins for whole plot
+#     mar = c(3,4,3.2,1)  # margins for individual plots
+#     ) 
+# 
+# xl <- c(-12,12)
+# yl <- c(-8,8)
+#  
+# layout(matrix(c(1, 2, 3, 4, 5, 6), 2, 3, byrow=TRUE))
+# # layout.show(6)
+# 
+# list_objects=list("res_sgRNA_ars_vs_HS", "res_sgRNA_ars_vs_NaCl", "res_sgRNA_ars_vs_UV", 
+#                   "res_sgRNA_HS_vs_NaCl", "res_sgRNA_HS_vs_UV",
+#                   "res_sgRNA_NaCl_vs_UV")
+#   
+#   
+# for (i in 1:length(list_objects) ) {
+#   eisaR::plotEISA(get(list_objects[[i]]), maxFDR = 0.05, minLfc = 2,
+#                   xlim=xl, ylim=yl,  
+#                   main=list_objects[[i]] , xlab='', ylab='', 
+#                   cex.axis=1.5, cex.main=1.5)
+# }
+# 
+# title(main = "EISA - sgRNA_intron-exon analysis, FDR < 0.05, LFC > 2",
+#       xlab = expression(paste(Delta,'intron (cond1-cond2)')),
+#       ylab = expression(paste(Delta,'exon (cond1-cond2)')),
+#       outer = TRUE, line = 1,
+#       cex.lab=2, cex.main=2)
+# dev.off()
+```
+
+```{r, look-at-eisa-totRNA-results}
+# res_totRNA_mock_vs_ars
+# res_totRNA_mock_vs_HS
+# res_totRNA_mock_vs_NaCl
+# res_totRNA_mock_vs_UV
+
+# number of genes with significant post-transcriptional regulation
+sum(res_totRNA_mock_vs_ars$tab.ExIn$FDR < 0.05)
+sum(res_totRNA_mock_vs_HS$tab.ExIn$FDR < 0.05)
+sum(res_totRNA_mock_vs_NaCl$tab.ExIn$FDR < 0.05)
+sum(res_totRNA_mock_vs_UV$tab.ExIn$FDR < 0.05)
+
+# comparison of contrasts
+# diag(cor(res_totRNA_mock_vs_ars$contrasts[ids, ], res_totRNA_mock_vs_ars_o$contrasts[ids, ]))
+# plot(res_totRNA_mock_vs_ars$contrasts[ids, 3], res_totRNA_mock_vs_ars_o$contrasts[ids, 3], pch = "*",
+#      xlab = "Interaction effects for modelSamples=FALSE",
+#      ylab = "Interaction effects for modelSamples=TRUE")
+
+# # comparison of interaction significance
+# plot(-log10(res_totRNA_mock_vs_ars$tab.ExIn[ids, "FDR"]), -log10(res_totRNA_mock_vs_ars_o$tab.ExIn[ids, "FDR"]), pch = "*",
+#      xlab = "-log10(FDR) for modelSamples=FALSE",
+#      ylab = "-log10(FDR) for modelSamples=TRUE")
+# abline(a = 0, b = 1, col = "gray")
+# legend("bottomright", "y = x", bty = "n", lty = 1, col = "gray")
+```
+
+
+```{r, get-totRNA-results}
+#why?
+#res_totRNA_mock_vs_ars$designMatrix
+# checked the last 2 columns in the vignette (c1.ex and c2.ex) and they are the same
+
+# get results out
+out_totRNA_mock_vs_ars <- res_totRNA_mock_vs_ars$tab.ExIn[order(res_totRNA_mock_vs_ars$tab.ExIn$FDR, decreasing=FALSE),]
+out_totRNA_mock_vs_HS <- res_totRNA_mock_vs_HS$tab.ExIn[order(res_totRNA_mock_vs_HS$tab.ExIn$FDR, decreasing=FALSE),]
+out_totRNA_mock_vs_NaCl <- res_totRNA_mock_vs_NaCl$tab.ExIn[order(res_totRNA_mock_vs_NaCl$tab.ExIn$FDR, decreasing=FALSE),]
+out_totRNA_mock_vs_UV <- res_totRNA_mock_vs_UV$tab.ExIn[order(res_totRNA_mock_vs_UV$tab.ExIn$FDR, decreasing=FALSE),]
+
+# change to write to 'totRNA_comparisons' folder
+write.table(format(out_totRNA_mock_vs_ars, digits=3), file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_totRNA_mock_vs_ars.tsv'), sep="\t", row.names=TRUE, quote = FALSE)
+write.table(format(out_totRNA_mock_vs_HS, digits=3), file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_totRNA_mock_vs_HS.tsv'), sep="\t", row.names=TRUE, quote = FALSE)
+write.table(format(out_totRNA_mock_vs_NaCl, digits=3), file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_totRNA_mock_vs_NaCl.tsv'), sep="\t", row.names=TRUE, quote = FALSE)
+write.table(format(out_totRNA_mock_vs_UV, digits=3), file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_totRNA_mock_vs_UV.tsv'), sep="\t", row.names=TRUE, quote = FALSE)
+
+#BiocManager::install("EnsDb.Hsapiens.v86")
+suppressPackageStartupMessages(library(EnsDb.Hsapiens.v86))
+#supportedFilters(EnsDb.Hsapiens.v86)
+
+# Convert from ensembl.gene to gene.symbol   
+out_totRNA_mock_vs_ars_geneSymbol <- ensembldb::select(EnsDb.Hsapiens.v86, keys=row.names(out_totRNA_mock_vs_ars), keytype = "GENEID", columns = c("SYMBOL","GENEID"))
+out_totRNA_mock_vs_HS_geneSymbol <- ensembldb::select(EnsDb.Hsapiens.v86, keys=row.names(out_totRNA_mock_vs_HS), keytype = "GENEID", columns = c("SYMBOL","GENEID"))
+out_totRNA_mock_vs_NaCl_geneSymbol <- ensembldb::select(EnsDb.Hsapiens.v86, keys=row.names(out_totRNA_mock_vs_NaCl), keytype = "GENEID", columns = c("SYMBOL","GENEID"))
+out_totRNA_mock_vs_UV_geneSymbol <- ensembldb::select(EnsDb.Hsapiens.v86, keys=row.names(out_totRNA_mock_vs_UV), keytype = "GENEID", columns = c("SYMBOL","GENEID"))
+
+# change to write to 'totRNA_comparisons' folder
+write.table(out_totRNA_mock_vs_ars_geneSymbol, file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_totRNA_mock_vs_ars_geneSymbol'), sep="\t", row.names=TRUE, col.names=TRUE, quote=FALSE)
+write.table(out_totRNA_mock_vs_HS_geneSymbol, file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_totRNA_mock_vs_HS_geneSymbol'), sep="\t", row.names=TRUE, col.names=TRUE, quote=FALSE)
+write.table(out_totRNA_mock_vs_NaCl_geneSymbol, file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_totRNA_mock_vs_NaCl_geneSymbol'), sep="\t", row.names=TRUE, col.names=TRUE, quote=FALSE)
+write.table(out_totRNA_mock_vs_UV_geneSymbol, file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_totRNA_mock_vs_UV_geneSymbol'), sep="\t", row.names=TRUE, col.names=TRUE, quote=FALSE)
+```
+
+
+```{r, get-sgRNA-results}
+# get results out
+
+out_sgRNA_ars_vs_HS <- res_sgRNA_ars_vs_HS$tab.ExIn[order(res_sgRNA_ars_vs_HS$tab.ExIn$FDR, decreasing=FALSE),]
+out_sgRNA_ars_vs_NaCl <- res_sgRNA_ars_vs_NaCl$tab.ExIn[order(res_sgRNA_ars_vs_NaCl$tab.ExIn$FDR, decreasing=FALSE),]
+out_sgRNA_ars_vs_UV <- res_sgRNA_ars_vs_UV$tab.ExIn[order(res_sgRNA_ars_vs_UV$tab.ExIn$FDR, decreasing=FALSE),]
+
+out_sgRNA_HS_vs_NaCl <- res_sgRNA_HS_vs_NaCl$tab.ExIn[order(res_sgRNA_HS_vs_NaCl$tab.ExIn$FDR, decreasing=FALSE),]
+out_sgRNA_HS_vs_UV <- res_sgRNA_HS_vs_UV$tab.ExIn[order(res_sgRNA_HS_vs_UV$tab.ExIn$FDR, decreasing=FALSE),]
+
+out_sgRNA_NaCl_vs_UV <- res_sgRNA_NaCl_vs_UV$tab.ExIn[order(res_sgRNA_NaCl_vs_UV$tab.ExIn$FDR, decreasing=FALSE),]
+########
+
+# change to write to 'sgRNA_comparisons' folder
+write.table(format(out_sgRNA_ars_vs_HS, digits=3), file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_sgRNA_ars_vs_HS.tsv'), sep="\t", row.names=TRUE, quote = FALSE)
+write.table(format(out_sgRNA_ars_vs_NaCl, digits=3), file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_sgRNA_ars_vs_NaCl.tsv'), sep="\t", row.names=TRUE, quote = FALSE)
+write.table(format(out_sgRNA_ars_vs_UV, digits=3), file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_sgRNA_ars_vs_UV.tsv'), sep="\t", row.names=TRUE, quote = FALSE)
+
+write.table(format(out_sgRNA_HS_vs_NaCl, digits=3), file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_sgRNA_HS_vs_NaCl.tsv'), sep="\t", row.names=TRUE, quote = FALSE)
+write.table(format(out_sgRNA_HS_vs_UV, digits=3), file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_sgRNA_HS_vs_UV.tsv'), sep="\t", row.names=TRUE, quote = FALSE)
+
+write.table(format(out_sgRNA_NaCl_vs_UV, digits=3), file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_sgRNA_NaCl_vs_UV.tsv'), sep="\t", row.names=TRUE, quote = FALSE)
+###########
+
+#BiocManager::install("EnsDb.Hsapiens.v86")
+suppressPackageStartupMessages(library(EnsDb.Hsapiens.v86))
+#supportedFilters(EnsDb.Hsapiens.v86)
+
+# Convert from ensembl.gene to gene.symbol   
+out_sgRNA_ars_vs_HS_geneSymbol <- ensembldb::select(EnsDb.Hsapiens.v86, keys=row.names(out_sgRNA_ars_vs_HS), keytype = "GENEID", columns = c("SYMBOL","GENEID"))
+out_sgRNA_ars_vs_NaCl_geneSymbol <- ensembldb::select(EnsDb.Hsapiens.v86, keys=row.names(out_sgRNA_ars_vs_NaCl), keytype = "GENEID", columns = c("SYMBOL","GENEID"))
+out_sgRNA_ars_vs_UV_geneSymbol <- ensembldb::select(EnsDb.Hsapiens.v86, keys=row.names(out_sgRNA_ars_vs_UV), keytype = "GENEID", columns = c("SYMBOL","GENEID"))
+
+out_sgRNA_HS_vs_NaCl_geneSymbol <- ensembldb::select(EnsDb.Hsapiens.v86, keys=row.names(out_sgRNA_HS_vs_NaCl), keytype = "GENEID", columns = c("SYMBOL","GENEID"))
+out_sgRNA_HS_vs_UV_geneSymbol <- ensembldb::select(EnsDb.Hsapiens.v86, keys=row.names(out_sgRNA_HS_vs_UV), keytype = "GENEID", columns = c("SYMBOL","GENEID"))
+
+out_sgRNA_NaCl_vs_UV_geneSymbol <- ensembldb::select(EnsDb.Hsapiens.v86, keys=row.names(out_sgRNA_NaCl_vs_UV), keytype = "GENEID", columns = c("SYMBOL","GENEID"))
+###
+
+# change to write to 'sgRNA_comparisons' folder
+write.table(out_sgRNA_ars_vs_HS_geneSymbol, file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_sgRNA_ars_vs_HS_geneSymbol'), sep="\t", row.names=TRUE, col.names=TRUE, quote=FALSE)
+write.table(out_sgRNA_ars_vs_NaCl_geneSymbol, file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_sgRNA_ars_vs_NaCl_geneSymbol'), sep="\t", row.names=TRUE, col.names=TRUE, quote=FALSE)
+write.table(out_sgRNA_ars_vs_UV_geneSymbol, file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_sgRNA_ars_vs_UV_geneSymbol'), sep="\t", row.names=TRUE, col.names=TRUE, quote=FALSE)
+
+write.table(out_sgRNA_HS_vs_NaCl_geneSymbol, file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_sgRNA_HS_vs_NaCl_geneSymbol'), sep="\t", row.names=TRUE, col.names=TRUE, quote=FALSE)
+write.table(out_sgRNA_HS_vs_UV_geneSymbol, file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_sgRNA_HS_vs_UV_geneSymbol'), sep="\t", row.names=TRUE, col.names=TRUE, quote=FALSE)
+
+write.table(out_sgRNA_NaCl_vs_UV_geneSymbol, file=paste0(path_inDir, '/intron_analysis_bam/', 'out_fC_sgRNA_NaCl_vs_UV_geneSymbol'), sep="\t", row.names=TRUE, col.names=TRUE, quote=FALSE)
+```
+
+
+
+## Run EISA step by step
+# load the metadata (??)
+```{r, check_counts, eval=FALSE}
+# fmeta_all <- "sampleSheets/all_batch_corrected_sampleSheet.tsv"
+# dfmeta_all <- read.delim(paste0(path_inDir, '/', fmeta_all), header = TRUE, sep='\t', na.strings="NA" , row.names=1)
+# dfmeta_all$batch <- factor(dfmeta_all$batch, levels=c("collA","collB")) 
+# dfmeta_all$condition <- factor(dfmeta_all$condition, levels=c("totRNA_mock","totRNA_arsenite", "totRNA_HS", "totRNA_NaCl", "totRNA_UV", "sgRNA_arsenite", "sgRNA_HS", "sgRNA_NaCl", "sgRNA_UV")) 
+# dfmeta_all$group <- factor(dfmeta_all$group, levels=c("All","treatment1" ,"treatment2","treatment3" ,"treatment4")) 
+```
+
+
+
+
+```{r, eisa-manual, eval=FALSE}
+# ## 1. Normalization
+# fracIn <- colSums(counts_introns)/colSums(less_counts_geneBody)
+# summary(fracIn)
+# 
+# # scale counts to the mean library size,
+# # separately for exons and introns
+# Nex <- t(t(less_counts_exon) / colSums(less_counts_exon) * mean(colSums(less_counts_exon)))
+# Nin <- t(t(counts_introns) / colSums(counts_introns) * mean(colSums(counts_introns)))
+# 
+# # log transform (add a pseudocount of 8)
+# NLex <- log2(Nex + 8)
+# NLin <- log2(Nin + 8)          # WARNING: NaNs produced
+# 
+# #Identify quantifiable genes
+# #remove very low counts in either exons or introns
+# #can use a fixed cut-off on the normalized, log-transformed intron and exonic counts:
+# 
+# quantGenes <- rownames(less_counts_exon)[ rowMeans(NLex) > 5.0 & rowMeans(NLin) > 5.0 ]
+# length(quantGenes)
+# 
+# #calculate the changes between neurons and ES cells in introns (ΔI), in exons (ΔE), and the difference between the two (ΔE−ΔI):
+# Dex <- NLex[,c("s1","s2","s3")] - NLex[,c("s4","s5","s6")]
+# Din <- NLin[,c("s1","s2","s3")] - NLin[,c("s4","s5","s6")]
+# Dex.Din <- Dex - Din
+# 
+# cor(Dex[quantGenes,1], Dex[quantGenes,2])
+# #> [1] 0.9379397
+# cor(Din[quantGenes,1], Din[quantGenes,2])
+# #> [1] 0.8449252
+# cor(Dex.Din[quantGenes,1], Dex.Din[quantGenes,2])
+# #> [1] 0.5518187
+```
+
+```{r, statistical-analysis, eval=FALSE}
+# # create DGEList object with exonic and intronic counts
+# library(edgeR)
+# cnt <- data.frame(Ex = less_counts_exon, In = counts_introns)
+# y <- DGEList(counts = cnt, genes = data.frame(ENTREZID = rownames(cnt)))
+# 
+# # select quantifiable genes and normalize
+# y <- y[quantGenes, ]
+# y <- calcNormFactors(y)
+# 
+# 
+# 
+# # design matrix with interaction term
+# region <- factor(rep(c("ex","in"), each=6, levels = c("in", "ex")) )
+# 
+# #cond <- rep(factor(c("ES","ES","TN","TN")), 2)
+# cond <- droplevels(treat[c(1:3, 4:6)])
+# 
+# design <- model.matrix(~ region * cond)
+# rownames(design) <- colnames(cnt)
+# design
+# 
+# # estimate model parameters
+# y <- estimateDisp(y, design)
+# fit <- glmFit(y, design)
+# 
+# # calculate likelihood-ratio between full and reduced models
+# lrt <- glmLRT(fit)
+# 
+# # create results table
+# tt <- topTags(lrt, n = nrow(y), sort.by = "none")
+# head(tt$table[order(tt$table$FDR, decreasing = FALSE), ])
+# ################################
+```
+
+
+```{r, vignette}
+#annotation
+txdbFile <- system.file("extdata", "hg19sub.sqlite", package = "eisaR")
+txdb <- AnnotationDbi::loadDb(txdbFile)
+
+#load count data
+cntEx <- readRDS(system.file("extdata",
+                             "Fig3abc_GSE33252_rawcounts_exonic.rds",
+                             package = "eisaR"))
+cntIn <- readRDS(system.file("extdata",
+                             "Fig3abc_GSE33252_rawcounts_intronic.rds",
+                             package = "eisaR"))
+
+#run eisa
+# remove "width" column
+Rex <- cntEx[, colnames(cntEx) != "width"]
+Rin <- cntIn[, colnames(cntIn) != "width"]
+
+# create condition factor (contrast will be TN - ES)
+cond <- factor(c("ES", "ES", "TN", "TN"))
+
+# run EISA
+res <- runEISA(Rex, Rin, cond)
+
+```
+
