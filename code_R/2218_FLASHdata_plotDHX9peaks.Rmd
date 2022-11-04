@@ -1,0 +1,84 @@
+---
+title: "2218_mutation_analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Introduction
+- all data is in: '/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.09_Flash_2218_overlap/'
+
+x For run #2218, load the TtoC mutations in the merged samples (vcfs in '10b_plots_mutations/3_merged_replicates_SNPs')
+  x either reunion (files with just 'merge')
+  x or only mutations that are in all 3 files (files with 'eq3')
+
+[] the peaks are from Yidan (/ln_data/ln_data/03aPeakCallingSTARPeakachuRscript/DHX9_*/peaks.bed)
+  [] load the files
+
+[] get the introns per gene
+  [] split by length (at 100.000bp length) into very long and the rest
+  - annotate the introns with gene name (ID)
+  - intersect the TtoC SNPs vcf file with the annotated bed file
+
+- Sum up the number of DHX9 mutations that are in a particular gene
+  - also per intron
+  - also per exon
+
+- Plot the numbers
+##############################################
+
+
+```{r load_data_mut, echo=FALSE}
+
+path_wd <- "/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.09_Flash_2218_overlap"
+
+path_peaksUV <- "/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.09_Flash_2218_overlap/ln_data/03aPeakCallingSTARPeakachuRscript/DHX9_UV"
+path_peaksWT <- "/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.09_Flash_2218_overlap/ln_data/03aPeakCallingSTARPeakachuRscript/DHX9_WT"
+
+# load files with peaks
+peaksUV <- read.delim(paste0(path_peaksUV, "/peaks.bed"), header=TRUE, sep = "\t", stringsAsFactors=FALSE, quote="")
+peaksWT <- read.delim(paste0(path_peaksWT, "/peaks.bed"), header=TRUE, sep = "\t", stringsAsFactors=FALSE, quote="")
+colnames(peaksUV) <- c('chr', 'start', 'end', 'peak_name', 'X0', 'strand')
+colnames(peaksWT) <- c('chr', 'start', 'end', 'peak_name', 'X0', 'strand')
+###########
+
+#parallel
+
+#library(rtracklayer)
+#peaksUV2 <- import(paste0(path_peaksUV, "/peaks.bed"), format="bed")
+#peaksWT2 <- import(paste0(path_peaksWT, "/peaks.bed"), format="bed")
+
+#parallel2
+library(GenomicFeatures)
+## create a TxDb out of alternative sources of gene annotations (gtf file from version 27)
+gtf_ver27 <- "/data/repository/organisms/GRCh38_ensembl/gencode/release_27/genes.gtf"
+txHu_v27 <- makeTxDbFromGFF(file = gtf_ver27, format = "auto", organism = "Homo sapiens")
+
+## get intron information
+all.introns <- intronicParts(txHu_v27)
+subset.introns_gt35 <- all.introns[width(all.introns) > 35]
+## number of unique gene names present:
+#length(unique(as.character(unlist(mcols(subset.introns_gt35)$gene_id))))
+
+subset.introns_gt100k <- subset.introns_gt35[width(subset.introns_gt35) > 100000]
+
+subset.introns_lt100k <- subset.introns_gt35[width(subset.introns_gt35) < 100000]
+########################
+
+##chr names
+#seqlevels(txHu_v27)
+
+## extract chromosome names
+#ensembl_seqlevels = seqlevels(txHu_v27)
+
+## paste the chr prefix to the chromosome names
+#ucsc_seqlevels    = paste0('chr', ensembl_seqlevels)
+
+## replace ensembl with ucsc chromosome names
+#seqlevels(txHu_v27, pruning.mode='coarse') = ucsc_seqlevels
+
+```
+
+

@@ -1,0 +1,780 @@
+---
+title: "2218_Yilong_mRNA_stressGranules_CIRIquantDESeq2"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  html_notebook: default
+  toc: true
+---
+
+# 1. Sample sheet and background
+
+sample name     note    Barcode note-1
+1       total RNA of mock-1     22L005998       collected at 20200215
+2       total RNA of mock-2     22L005999       collected at 20200215
+3       total RNA of mock-3     22L006000       collected at 20200218
+4       total RNA of arsenite-1 22L006001       collected at 20200215
+5       total RNA of arsenite-2 22L006002       collected at 20200218
+6       total RNA of arsenite-3 22L006003       collected at 20200218
+7       total RNA of HS-1       22L006004       collected at 20200218
+8       total RNA of HS-2       22L006005       collected at 20200218
+9       total RNA of HS-3       22L006006       collected at 20200218
+10      total RNA of NaCl-1     22L006007       collected at 20200215
+11      total RNA of NaCl-2     22L006008       collected at 20200218
+12      total RNA of NaCl-3     22L006009       collected at 20200218
+13      total RNA of 4sUV-1     22L006010       collected at 20200215
+14      total RNA of 4sUV-2     22L006011       collected at 20200215
+15      total RNA of 4sUV-3     22L006012       collected at 20200218
+16      SG RNA of arsenite-1    22L006013       collected at 20200215
+17      SG RNA of arsenite-2    22L006014       collected at 20200218
+18      SG RNA of arsenite-3    22L006015       collected at 20200218
+19      SG RNA of HS-1  22L006016       collected at 20200218
+20      SG RNA of HS-2  22L006017       collected at 20200218
+21      SG RNA of HS-3  22L006018       collected at 20200218
+22      SG RNA of  NaCl-1       22L006019       collected at 20200215
+23      SG RNA of  NaCl-2       22L006020       collected at 20200218
+24      SG RNA of  NaCl-3       22L006021       collected at 20200218
+25      SG RNA of UV-1  22L006022       collected at 20200215
+26      SG RNA of UV-2  22L006023       collected at 20200215
+27      SG RNA of UV-3  22L006024       collected at 20200218
+
+# 2. Load libraries
+```{r, load_libraries, include=FALSE}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(DESeq2))
+suppressPackageStartupMessages(library(apeglm))
+suppressPackageStartupMessages(library(ashr))
+suppressPackageStartupMessages(library(pheatmap))
+suppressPackageStartupMessages(library(tibble))
+library(RColorBrewer)
+```
+
+# 3. Create dds unfiltered object
+
+This workflow uses the *DESeq2* R packages. We can start from the counts summarized at gene level, found in:
+
+## 3.a) Load the data
+```{r, load_data}
+dfolder <- "/data/akhtar/group2/snakequest_result/FANCI_RNA_seq_4stresses/analysis_CIRI2_full/without_CIRI_DE/"
+fcounts_gene <- "gene_count_matrix.csv"
+fcounts_transcripts <- "transcript_count_matrix.csv"
+
+dfcounts_gene <- read.delim(paste0(dfolder, fcounts_gene), header = TRUE, sep=',', na.strings="NA") #, row.names=1) needs work later
+dfcounts_transcripts <- read.delim(paste0(dfolder, fcounts_transcripts), header = TRUE, sep=',', na.strings="NA", row.names=1)
+```
+
+There are `r dim(dfcounts_gene)[1]` genes/ rows and `r dim(dfcounts_gene)[2]` samples/ columns in the gene count data frame, and `r dim(dfcounts_transcripts)[1]` genes/ rows and `r dim(dfcounts_transcripts)[2]` samples/ columns in the transcript count data frame.
+
+## 3.b) Check the metadata
+```{r, label=check_counts, echo=FALSE}
+fmeta_all <- "/data/akhtar/group2/snakequest_result/FANCI_RNA_seq_4stresses/analysis_CIRI2_full/without_CIRI_DE/all_batch_corrected_sampleSheet.tsv"
+dfmeta_all <- read.delim(fmeta_all, header = TRUE, sep='\t', na.strings="NA" , row.names=1)
+```
+
+
+
+```{r, check_input, echo=FALSE, include=FALSE}
+dfcounts_gene  %>% head()
+dfcounts_transcripts  %>% head()
+dfmeta_all  %>% head()
+```
+############################
+
+## 3.c) rearrange the data
+```{r, rearrange_input, echo=FALSE}
+# split the 1st column of gene file by '|' and make 2 columns
+dfcounts_gene <- dfcounts_gene %>% separate(gene_id, c('gene_ID', 'gene_symbol'), sep='\\|')
+
+# make 1st column into rownames
+rownames(dfcounts_gene) <- dfcounts_gene$gene_ID
+dfcounts_gene$gene_ID <- NULL
+dfcounts_gene$gene_symbol <- NULL
+
+# rename the columns in both 'gene' and 'transcript' files
+  # change metadata: add column, replace some names, add numbers
+    dfmeta_all$rename <- dfmeta_all$condition
+    dfmeta_all$rename <- gsub('arsenite', 'ars', dfmeta_all$rename) 
+    dfmeta_all$rename <- paste(dfmeta_all$rename, rep_len(1:3, nrow(dfmeta_all)), sep="")
+
+    
+  # rename the columns for genes and transcripts files:
+    colnames(dfcounts_gene) <- gsub('total', 'tot', colnames(dfcounts_gene)) 
+    colnames(dfcounts_transcripts) <- gsub('total', 'tot', colnames(dfcounts_transcripts)) 
+      
+    found <- match(colnames(dfcounts_gene), dfmeta_all$rename, nomatch = 0)
+    colnames(dfcounts_gene)[colnames(dfcounts_gene) %in% dfmeta_all$rename] <- rownames(dfmeta_all)[found]
+ 
+   found2 <- match(colnames(dfcounts_transcripts), dfmeta_all$rename, nomatch = 0)
+    colnames(dfcounts_transcripts)[colnames(dfcounts_transcripts) %in% dfmeta_all$rename] <- rownames(dfmeta_all)[found2]
+   
+  # drop last column of the metadata
+      dfmeta_all$rename <- NULL
+      
+# reorder the columns alphanumerically
+suppressPackageStartupMessages(library(gtools))
+
+dfcounts_gene <- dfcounts_gene[,gtools::mixedorder(colnames(dfcounts_gene))]
+dfcounts_transcripts <- dfcounts_transcripts[,gtools::mixedorder(colnames(dfcounts_transcripts))]
+
+
+
+dfcounts_gene  %>% head()
+dfcounts_transcripts  %>% head()
+dfmeta_all  %>% head()
+```
+
+
+```{r, factoring, echo=FALSE}
+dfmeta_all$batch <- factor(dfmeta_all$batch, levels=c("collA","collB")) 
+dfmeta_all$condition <- factor(dfmeta_all$condition, levels=c("totRNA_mock","totRNA_arsenite", "totRNA_HS", "totRNA_NaCl", "totRNA_UV", "sgRNA_arsenite", "sgRNA_HS", "sgRNA_NaCl", "sgRNA_UV")) 
+dfmeta_all$group <- factor(dfmeta_all$group, levels=c("All","treatment1" ,"treatment2","treatment3" ,"treatment4")) 
+```
+
+## 3.d) Design
+
+```{r, design}
+#create design
+design_batch <- ~batch + condition
+```
+
+## 3.e) Create dds unfiltered object
+
+```{r, final_check_create_dds_obj, echo=FALSE}
+#check if the col and rows are in the same order:
+#all(rownames(dfmeta_all) == colnames(dfcounts_gene))   ## > FALSE
+all(rownames(dfmeta_all) == colnames(dfcounts_gene[,rownames(dfmeta_all)]))
+
+#make dds obj - AND rearrange the columns from the counts df to correspond to the ones in the metadata
+dds_batch_gene <- DESeq2::DESeqDataSetFromMatrix(countData = dfcounts_gene[,rownames(dfmeta_all)], colData = dfmeta_all, design = design_batch)
+
+dds_batch_transcript <- DESeq2::DESeqDataSetFromMatrix(countData = dfcounts_transcripts[,rownames(dfmeta_all)], colData = dfmeta_all, design = design_batch)
+```
+
+## 3.f) PCA plots
+
+Only the code for gene-PCA is shown.
+```{r, plot_PCA_batch_gene, echo=FALSE}
+
+# png("./manual_PCA2.png", 
+#   width = 8*300,        # 5 x 300 pixels
+#   height = 5*300,
+#   res = 300,            # 300 pixels per inch
+#   pointsize = 8)        # smaller font size
+
+# rld_PCA_gene <- plotPCA(rlog(dds_batch_gene, blind = TRUE), intgroup=c("batch", "condition"), returnData=TRUE)
+# percentVar <- round(100 * attr(rld_PCA_gene, "percentVar"), 1)   # rounded values for each axis of PC variance
+# ggplot(rld_PCA_gene, aes(PC1, PC2, color=condition, shape=batch)) +
+#   geom_point(size=3) +
+#   scale_shape_manual(values=c(3, 1, 2))+    # change shapes of symbols
+#   scale_size_manual(values=c(8, 8, 8))+     # change sizes of symbols
+#   xlab(paste0("PC1: ",percentVar[1])) +
+#   ylab(paste0("PC2: ",percentVar[2]))
+# 
+# rld_PCA_gene_tot <- plotPCA(rlog(dds_batch_gene[, grepl("totRNA", dds_batch_gene$condition)], blind = TRUE), intgroup=c("batch", "condition"), returnData=TRUE)
+# percentVar <- round(100 * attr(rld_PCA_gene_tot, "percentVar"), 1)   # rounded values for each axis of PC variance
+# ggplot(rld_PCA_gene_tot, aes(PC1, PC2, color=condition, shape=batch)) +
+#   geom_point(size=3) +
+#   scale_shape_manual(values=c(3, 1, 2))+    # change shapes of symbols
+#   scale_size_manual(values=c(8, 8, 8))+     # change sizes of symbols
+#   xlab(paste0("PC1: ",percentVar[1])) +
+#   ylab(paste0("PC2: ",percentVar[2]))
+
+rld_PCA_gene_sg <- plotPCA(rlog(dds_batch_gene[, grepl("sgRNA", dds_batch_gene$condition)], blind = TRUE), intgroup=c("batch", "condition"), returnData=TRUE)
+percentVar <- round(100 * attr(rld_PCA_gene_sg, "percentVar"), 1)   # rounded values for each axis of PC variance
+ggplot(rld_PCA_gene_sg, aes(PC1, PC2, color=condition)) +
+  geom_point(size=3) +
+  theme_classic(base_size = 12) +
+  scale_size_manual(values=c(10, 10, 10))+     # change sizes of symbols
+  xlab(paste0("PC1: ",percentVar[1])) +
+  ylab(paste0("PC2: ",percentVar[2]))
+#dev.off()
+```
+
+
+
+
+```{r, plot_PCA_batch_transcr, echo=FALSE}
+#png("./manual_PCA.png", width=1600, height=800, units = "px", bg = "white")
+
+# rld_PCA_trans <- plotPCA(rlog(dds_batch_transcript, blind = TRUE), intgroup=c("batch", "condition"), returnData=TRUE)
+# percentVar <- round(100 * attr(rld_PCA_trans, "percentVar"), 1)   # rounded values for each axis of PC variance
+# ggplot(rld_PCA_trans, aes(PC1, PC2, color=condition, shape=batch)) +
+#   geom_point(size=3) +
+#   scale_shape_manual(values=c(3, 1, 2))+    # change shapes of symbols
+#   scale_size_manual(values=c(8, 8, 8))+     # change sizes of symbols
+#   xlab(paste0("PC1: ",percentVar[1])) +
+#   ylab(paste0("PC2: ",percentVar[2]))
+#
+# rld_PCA_trans_tot <- plotPCA(rlog(dds_batch_transcript[, grepl("totRNA", dds_batch_transcript$condition)], blind = TRUE), intgroup=c("batch", "condition"), returnData=TRUE)
+# percentVar <- round(100 * attr(rld_PCA_trans_tot, "percentVar"), 1)   # rounded values for each axis of PC variance
+# ggplot(rld_PCA_trans_tot, aes(PC1, PC2, color=condition, shape=batch)) +
+#   geom_point(size=3) +
+#   scale_shape_manual(values=c(3, 1, 2))+    # change shapes of symbols
+#   scale_size_manual(values=c(8, 8, 8))+     # change sizes of symbols
+#   xlab(paste0("PC1: ",percentVar[1])) +
+#   ylab(paste0("PC2: ",percentVar[2]))
+# 
+# rld_PCA_trans_sg <- plotPCA(rlog(dds_batch_transcript[, grepl("sgRNA", dds_batch_transcript$condition)], blind = TRUE), intgroup=c("batch", "condition"), returnData=TRUE)
+# percentVar <- round(100 * attr(rld_PCA_trans_sg, "percentVar"), 1)   # rounded values for each axis of PC variance
+# ggplot(rld_PCA_trans_sg, aes(PC1, PC2, color=condition, shape=batch)) +
+#   geom_point(size=3) +
+#   scale_shape_manual(values=c(3, 1, 2))+    # change shapes of symbols
+#   scale_size_manual(values=c(8, 8, 8))+     # change sizes of symbols
+#   xlab(paste0("PC1: ",percentVar[1])) +
+#   ylab(paste0("PC2: ",percentVar[2]))
+
+
+#dev.off()
+```
+
+## 3.g) Run DESeq
+
+```{r, DESeq2_batch}
+#res_batch_gene <- DESeq2::DESeq(dds_batch_gene)
+# plotDispEsts(dds_batch_gene)
+```
+
+
+```{r, DESeq2_batch2}
+#res_batch_transcript <- DESeq2::DESeq(dds_batch_transcript)
+# plotDispEsts(dds_batch_transcript)
+```
+
+# 4. Restart: Create dds filtered object
+
+```{r, filter_object, message=FALSE, warning=FALSE, echo=FALSE}
+#keep_gene_mean3 <- dds_batch_gene[rowMeans(counts(dds_batch_gene[, grepl("totRNA", dds_batch_gene$condition)])) >= 3 & rowMeans(counts(dds_batch_gene[, grepl("sgRNA", dds_batch_gene$condition)])) >= 3, ]
+
+filtered_dds_batch_gene <- dds_batch_gene[rowMeans(counts(dds_batch_gene[, grepl("totRNA", dds_batch_gene$condition)])) >= 3 & rowMeans(counts(dds_batch_gene[, grepl("sgRNA", dds_batch_gene$condition)])) >= 3, ]
+
+filtered_dds_batch_transcript <- dds_batch_transcript[rowMeans(counts(dds_batch_transcript[, grepl("totRNA", dds_batch_transcript$condition)])) >= 3 & rowMeans(counts(dds_batch_transcript[, grepl("sgRNA", dds_batch_transcript$condition)])) >= 3, ]
+
+```
+
+After filtering the dds object, we are left with:
+
+- for genes: `r dim(filtered_dds_batch_gene)[1]` rows and `r dim(filtered_dds_batch_gene)[2]` columns, from `r dim(dds_batch_gene)[1]` rows and `r dim(dds_batch_gene)[2]` column
+
+- for transcripts: `r dim(filtered_dds_batch_transcript)[1]` rows and `r dim(filtered_dds_batch_transcript)[2]` columns, from `r dim(dds_batch_transcript)[1]` rows and `r dim(dds_batch_transcript)[2]` column
+
+
+```{r, feature_filter, echo=FALSE}
+res_filt_batch_gene <- DESeq2::DESeq(filtered_dds_batch_gene)
+#plotDispEsts(res_filt_batch_gene)
+
+res_filt_batch_transcript <- DESeq2::DESeq(filtered_dds_batch_transcript)
+#plotDispEsts(res_filt_batch_gene)
+```
+
+# 5. Extract the contrasts for genes totRNA from filtered object
+```{r, results_gene_tot, message=FALSE, warning=FALSE, echo=FALSE}
+fdr=0.05   
+#lfc_filter=2
+#resultsNames(dds_batch)    # get names of contrasts
+#dfmeta_all$condition       # each condition
+
+## A) GENE: We have 4 comparisons for totalRNA: dfmeta_all$condition[1] vs dfmeta_all$condition[2]-[5]
+
+
+contrast_tot <- list(c("condition", levels(dfmeta_all$condition)[1], levels(dfmeta_all$condition)[2]), 
+                      c("condition", levels(dfmeta_all$condition)[1], levels(dfmeta_all$condition)[3]),
+                     c("condition", levels(dfmeta_all$condition)[1], levels(dfmeta_all$condition)[4]),
+                       c("condition", levels(dfmeta_all$condition)[1], levels(dfmeta_all$condition)[5]))
+
+#DE_gene_totRNA_arsenite_vs_totRNA_mock <- DESeq2::results(dds_batch, contrast=contrast_tot[[1]], independentFiltering=TRUE, alpha=0.05, lfcThreshold=lfc_filter, pAdjustMethod="BH", parallel=TRUE)
+
+#DE_gene_totRNA_arsenite_vs_totRNA_mock_ashr <- lfcShrink(dds_batch, contrast=contrast_tot[[1]], res=DE_gene_totRNA_arsenite_vs_totRNA_mock, type="ashr")
+
+#DE_gene_totRNA_arsenite_vs_totRNA_mock_apeglm <- lfcShrink(dds_batch, coef="condition_totRNA_arsenite_vs_totRNA_mock", res=DE_gene_totRNA_arsenite_vs_totRNA_mock, type="apeglm", lfcThreshold=lfc_filter)
+
+
+#these results have threshold for lfc at 0; filter further if wanting something like lfc=2
+for (a in contrast_tot){
+  print(paste0("DE_gene_", a[2], "_vs_", a[3]) )
+
+  assign(paste0("DE_gene_", a[2], "_vs_", a[3]), 
+         DESeq2::results(res_filt_batch_gene, contrast=a, alpha=0.05, pAdjustMethod="BH", parallel=TRUE) )
+  
+  assign(paste0("DE_gene_", a[2], "_vs_", a[3], "_ashr"), 
+         DESeq2::lfcShrink(res_filt_batch_gene, contrast=a, type="ashr", 
+         res=get(paste0("DE_gene_", a[2], "_vs_", a[3] ) )) 
+  )
+  
+  # subset only the genes that have padj < 0.05
+  assign(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"),
+         subset(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_ashr")), padj < 0.05)  
+  )
+  
+  # sort subset by padj
+	assign(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort"),
+	       get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"))[order(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"))$padj),]
+	)
+
+	
+	# sort subset by lfc
+	assign(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05lfc_sort"),
+	       get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"))[order(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"))$log2FoldChange),]
+	)
+	
+	
+	# write out files by adding a name for the rownames as well (it is 'tab' separated - not by space)
+	new_names <- c('gene_ID')
+
+#	write.table(new_names, file = paste0(outf, "DE_gene_CIRIout/", "DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=FALSE, row.names=FALSE, quote = F, eol='\t') 
+  
+#	write.table(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort")), file = paste0(dfolder, "DE_gene_CIRIout/", "DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=TRUE, row.names=TRUE, sep = "\t", quote = F, append = TRUE) 
+	}
+
+
+drawLines <- function() abline(h=c(-2,2),col="dodgerblue",lwd=2)
+
+# for (i in length(contrast_tot)) {
+#     png(paste0(dir_graphs, contrast_tot[i]), width=2160, height=1440, units = "px", bg = "white")
+#     #To specify plotting parameters, use 'par' after initializing the file
+#     #via pdf, png, or another figure file creation function.
+#     par(mar=c(0,0,0,0))
+#     par(oma=c(1,1,1,1))
+#     lwid=c(5,8)
+#     plotMA(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_ashr")), lfcThreshold=lfc_filter); drawLines()
+#     title(main=paste0("DE genes in ", contrast_tot[i])#,line=-0.5,oma=T,adj=0.75, cex.main = 2.5
+#           )
+#     #dev.off()
+# } 
+
+  DESeq2::plotMA(DE_gene_totRNA_mock_vs_totRNA_arsenite_ashr, main="DE_gene_totRNA_mock_vs_totRNA_arsenite_ashr"); drawLines()
+  DESeq2::plotMA(DE_gene_totRNA_mock_vs_totRNA_NaCl_ashr, main="DE_gene_totRNA_mock_vs_totRNA_NaCl_ashr"); drawLines()
+  DESeq2::plotMA(DE_gene_totRNA_mock_vs_totRNA_HS_ashr, main="DE_gene_totRNA_mock_vs_totRNA_HS_ashr"); drawLines()
+  DESeq2::plotMA(DE_gene_totRNA_mock_vs_totRNA_UV_ashr, main="DE_gene_totRNA_mock_vs_totRNA_UV_ashr"); drawLines()
+#################Stopped here######################
+
+
+
+#output <- list(dds = dds_batch, ddr = DE_gene_totRNA_arsenite_vs_totRNA_mock, ddr_shrunk = DE_gene_totRNA_arsenite_vs_totRNA_mock_ashr)
+  #DEseqout <- DESeq_basic(countData = '../featureCounts/counts.tsv', colData = coldata, design =d)
+```
+
+# 6. Extract the contrasts for genes sgRNA from filtered object
+```{r, results_gene_sg, message=FALSE, warning=FALSE, echo=FALSE}
+
+## the conditions were reversed, to have UV as the first condition!
+## B) GENE: We have 6 comparisons for sgRNA: dfmeta_all$condition[6]-dfmeta_all$condition[9]: all against all
+
+contrast_sg <- list(c("condition", levels(dfmeta_all$condition)[7], levels(dfmeta_all$condition)[6]), 
+                    c("condition", levels(dfmeta_all$condition)[8], levels(dfmeta_all$condition)[6]),
+                    c("condition", levels(dfmeta_all$condition)[9], levels(dfmeta_all$condition)[6]),
+                    
+                    c("condition", levels(dfmeta_all$condition)[8], levels(dfmeta_all$condition)[7]),
+                    c("condition", levels(dfmeta_all$condition)[9], levels(dfmeta_all$condition)[7]),
+                    
+                    c("condition", levels(dfmeta_all$condition)[9], levels(dfmeta_all$condition)[8]))
+
+#these results have threshold for lfc at 0; filter further if wanting something like lfc=2
+for (a in contrast_sg){
+  print(paste0("DE_gene_", a[2], "_vs_", a[3]) )
+
+  assign(paste0("DE_gene_", a[2], "_vs_", a[3]), 
+         DESeq2::results(res_filt_batch_gene, contrast=a, alpha=0.05, pAdjustMethod="BH", parallel=TRUE) )
+  
+  assign(paste0("DE_gene_", a[2], "_vs_", a[3], "_ashr"), 
+         DESeq2::lfcShrink(res_filt_batch_gene, contrast=a, type="ashr", 
+         res=get(paste0("DE_gene_", a[2], "_vs_", a[3] ) )) 
+  )
+  # subset only the gene that have padj < 0.05
+  assign(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"),
+         subset(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_ashr")), padj < 0.05)  
+  )
+  # sort subset by padj
+	assign(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort"),
+	       get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"))[order(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"))$padj),]
+	)
+	
+	# sort subset by lfc
+	assign(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05lfc_sort"),
+	       get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"))[order(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05"))$log2FoldChange),]
+	)
+	
+	# write out files by adding a name for the rownames as well (it is 'tab' separated - not by space)
+	new_names <- c('gene_ID')
+	#write.table(new_names, file = paste0(dfolder, "DE_gene_CIRIout/", "DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=FALSE, row.names=FALSE, quote = F, eol='\t') 
+	#write.table(get(paste0("DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort")), file = paste0(dfolder, "DE_gene_CIRIout/", "DE_gene_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=TRUE, row.names=TRUE, sep = "\t", quote = F, append = TRUE) 
+	}
+
+
+  DESeq2::plotMA(DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr, main="DE_gene_sgRNA_arsenite_vs_sgRNA_HS_ashr"); drawLines()
+  DESeq2::plotMA(DE_gene_sgRNA_NaCl_vs_sgRNA_arsenite_ashr, main="DE_gene_sgRNA_arsenite_vs_sgRNA_NaCl_ashr"); drawLines()
+  DESeq2::plotMA(DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr, main="DE_gene_sgRNA_arsenite_vs_sgRNA_UV_ashr"); drawLines()
+  DESeq2::plotMA(DE_gene_sgRNA_NaCl_vs_sgRNA_HS_ashr, main="DE_gene_sgRNA_HS_vs_sgRNA_NaCl_ashr"); drawLines()
+  DESeq2::plotMA(DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr, main="DE_gene_sgRNA_HS_vs_sgRNA_UV"); drawLines()
+  DESeq2::plotMA(DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr, main="DE_gene_sgRNA_NaCl_vs_sgRNA_UV_ashr"); drawLines()
+```
+
+The samples in the gene totRNA where samples are compared to totRNA_UV, they have larger log2FoldChanges than the rest.
+
+
+
+
+
+
+
+
+
+# 7. Extract the contrasts for transcripts totRNA from filtered object
+
+```{r, results_trans_tot, message=FALSE, warning=FALSE, echo=FALSE}
+## C) TRANSCR: We have 4 comparisons for totalRNA: dfmeta_all$condition[1] vs dfmeta_all$condition[2]-[5]
+### THERE IS AN ISSUE HERE: IF YOU RUN THIS STEP MANUALLY, IT WORKS. IT FAILS IF RUN WITHIN THE WHOLE SCRIPT. 
+### IT IS AS IF IT DOESN'T WAIT FOR THE PREVIOUS FUNCTIONS TO RUN
+
+#these results have threshold for lfc at 0; filter further if wanting something like lfc=2
+for (a in contrast_tot){
+  print(paste0("DE_trans_", a[2], "_vs_", a[3]) )
+
+  assign(paste0("DE_trans_", a[2], "_vs_", a[3]), 
+         DESeq2::results(res_filt_batch_transcript, contrast=a, alpha=0.05, pAdjustMethod="BH", parallel=TRUE) )
+  
+  assign(paste0("DE_trans_", a[2], "_vs_", a[3], "_ashr"), 
+         DESeq2::lfcShrink(res_filt_batch_transcript, contrast=a, type="ashr", 
+         res=get(paste0("DE_trans_", a[2], "_vs_", a[3] ) )) 
+  )
+  # subset only the transcripts that have padj < 0.05
+  assign(paste0("DE_trans_", a[2], "_vs_", a[3], "_padj0.05"),
+         subset(get(paste0("DE_trans_", a[2], "_vs_", a[3], "_ashr")), padj < 0.05)  
+  )
+  # sort subset by padj
+	assign(paste0("DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort"),
+	       get(paste0("DE_trans_", a[2], "_vs_", a[3], "_padj0.05"))[order(get(paste0("DE_trans_", a[2], "_vs_", a[3], "_padj0.05"))$padj),]
+	)
+	# write out files by adding a name for the rownames as well (it is 'tab' separated - not by space)
+	new_names <- c('transcript_ID')
+	#write.table(new_names, file = paste0(dfolder, "DE_transcript_CIRIout/", "DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=FALSE, row.names=FALSE, quote = F, eol='\t') 
+	#write.table(get(paste0("DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort")), file = paste0(dfolder, "DE_transcript_CIRIout/", "DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=TRUE, row.names=TRUE, sep = "\t", quote = F, append = TRUE) 
+}
+
+  DESeq2::plotMA(DE_trans_totRNA_mock_vs_totRNA_arsenite_ashr, main="DE_trans_totRNA_mock_vs_totRNA_arsenite_ashr"); drawLines()
+  DESeq2::plotMA(DE_trans_totRNA_mock_vs_totRNA_NaCl_ashr, main="DE_trans_totRNA_mock_vs_totRNA_NaCl_ashr"); drawLines()
+  DESeq2::plotMA(DE_trans_totRNA_mock_vs_totRNA_HS_ashr, main="DE_trans_totRNA_mock_vs_totRNA_HS_ashr"); drawLines()
+  DESeq2::plotMA(DE_trans_totRNA_mock_vs_totRNA_UV_ashr, main="DE_trans_totRNA_mock_vs_totRNA_UV_ashr"); drawLines()
+```
+
+
+
+# 8. Extract the contrasts for transcripts sgRNA from filtered object
+
+```{r, results_trans_sg, echo=FALSE, message=FALSE, warning=FALSE}
+
+contrast_sg <- list(c("condition", levels(dfmeta_all$condition)[6], levels(dfmeta_all$condition)[7]), 
+                    c("condition", levels(dfmeta_all$condition)[6], levels(dfmeta_all$condition)[8]),
+                    c("condition", levels(dfmeta_all$condition)[6], levels(dfmeta_all$condition)[9]),
+                    
+                    c("condition", levels(dfmeta_all$condition)[7], levels(dfmeta_all$condition)[8]),
+                    c("condition", levels(dfmeta_all$condition)[7], levels(dfmeta_all$condition)[9]),
+                    
+                    c("condition", levels(dfmeta_all$condition)[8], levels(dfmeta_all$condition)[9]))
+
+#these results have threshold for lfc at 0; filter further if wanting something like lfc=2
+for (a in contrast_sg){
+  print(paste0("DE_trans_", a[2], "_vs_", a[3]) )
+
+  assign(paste0("DE_trans_", a[2], "_vs_", a[3]), 
+         DESeq2::results(res_filt_batch_transcript, contrast=a, alpha=0.05, pAdjustMethod="BH", parallel=TRUE) )
+  
+  assign(paste0("DE_trans_", a[2], "_vs_", a[3], "_ashr"), 
+         DESeq2::lfcShrink(res_filt_batch_transcript, contrast=a, type="ashr", 
+         res=get(paste0("DE_trans_", a[2], "_vs_", a[3] ) )) 
+  )
+  # subset only the trans that have padj < 0.05
+  assign(paste0("DE_trans_", a[2], "_vs_", a[3], "_padj0.05"),
+         subset(get(paste0("DE_trans_", a[2], "_vs_", a[3], "_ashr")), padj < 0.05)  
+  )
+  # sort subset by padj
+	assign(paste0("DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort"),
+	       get(paste0("DE_trans_", a[2], "_vs_", a[3], "_padj0.05"))[order(get(paste0("DE_trans_", a[2], "_vs_", a[3], "_padj0.05"))$padj),]
+	)
+	# write out files by adding a name for the rownames as well (it is 'tab' separated - not by space)
+	new_names <- c('transcript_ID')
+	#write.table(new_names, file = paste0(dfolder, "DE_transcript_CIRIout/", "DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=FALSE, row.names=FALSE, quote = F, eol='\t') 
+	#write.table(get(paste0("DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort")), file = paste0(dfolder, "DE_transcript_CIRIout/", "DE_trans_", a[2], "_vs_", a[3], "_padj0.05sort.tsv"), col.names=TRUE, row.names=TRUE, sep = "\t", quote = F, append = TRUE) 
+	}
+
+
+  DESeq2::plotMA(DE_trans_sgRNA_arsenite_vs_sgRNA_HS_ashr, main="DE_trans_sgRNA_arsenite_vs_sgRNA_HS_ashr"); drawLines()
+  DESeq2::plotMA(DE_trans_sgRNA_arsenite_vs_sgRNA_NaCl_ashr, main="DE_trans_sgRNA_arsenite_vs_sgRNA_NaCl_ashr"); drawLines()
+  DESeq2::plotMA(DE_trans_sgRNA_arsenite_vs_sgRNA_UV_ashr, main="DE_trans_sgRNA_arsenite_vs_sgRNA_UV_ashr"); drawLines()
+  DESeq2::plotMA(DE_trans_sgRNA_HS_vs_sgRNA_NaCl_ashr, main="DE_trans_sgRNA_HS_vs_sgRNA_NaCl_ashr"); drawLines()
+  DESeq2::plotMA(DE_trans_sgRNA_HS_vs_sgRNA_UV, main="DE_trans_sgRNA_HS_vs_sgRNA_UV"); drawLines()
+  DESeq2::plotMA(DE_trans_sgRNA_NaCl_vs_sgRNA_UV_ashr, main="DE_trans_sgRNA_NaCl_vs_sgRNA_UV_ashr"); drawLines()
+```
+
+The samples in the transcript sgRNA have very large log2FoldChanges.
+
+
+
+# 9. Create the pairwise distance comparisson
+
+Only the code for gene pairwise distance is shown.
+
+```{r, pairwise_dist, echo=FALSE}
+
+## Sample distances
+#print("Preparing data: sample distances")
+rlog_gene <- DESeq2::rlog(filtered_dds_batch_gene)
+sampleDists_gene <- dist(t(SummarizedExperiment::assay(rlog_gene)))
+
+## Euclidean sample distance heatmap
+sampleDistMatrix_gene <- as.matrix(sampleDists_gene)
+
+rownames(sampleDistMatrix_gene) <- sprintf("%s_%s", colnames(rlog_gene), rlog_gene$condition)
+colnames(sampleDistMatrix_gene) <- sprintf("%s_%s", colnames(rlog_gene), rlog_gene$condition)
+colours <- colorRampPalette(rev(RColorBrewer::brewer.pal(9, "GnBu")))(255)
+
+# Sample distances heatmap
+#png("./dist_map.png", width=1600, height=800, units = "px", bg = "white")
+pheatmap(sampleDistMatrix_gene, color = colours, display_numbers = TRUE, 
+         cutree_rows = 2, cutree_cols = 2, # cut the heatmap row-wise to 2 clusters and col-wise to 2 clusters
+         main="Euclidean pairwise-distance comparison",
+         angle_col="45", fontsize=8, 
+)
+#dev.off()
+```
+
+The sgRNA_UV sample group is isolated from the other sgRNA samples = the content of this sample group is distinct from the other sgRNA samples.
+
+
+# 10. Make custom MA plots for some of the SG datasets
+
+```{r, MA_plots-sameYaxis}
+# png("./MA_CIRI2_plot_revUV.png", width=850, height=475, units = "px", bg = "white")
+# 
+# list_objects <- list('DE_gene_sgRNA_UV_vs_sgRNA_ars', 'DE_gene_sgRNA_UV_vs_sgRNA_HS', 'DE_gene_sgRNA_UV_vs_sgRNA_NaCl', 'DE_gene_sgRNA_HS_vs_sgRNA_ars')
+# list_data <- list(DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr, DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr, DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr, DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr)
+# 
+# 
+# par(oma = c(3,4,4,1),    # margins for whole plot
+#     mar = c(2,3,2.2,2)  # margins for individual plots
+#     )
+# 
+# yl <- c(-6,6)
+# 
+# layout(matrix(c(1, 2, 3, 4), 2, 2, byrow=TRUE))
+# # layout.show(6)
+# options(scipen=0) # to get scientific notation; the higher, the less the probability of lossing scientific notation
+# 
+# for (i in 1:length(list_objects) ) {
+#   DESeq2::plotMA(list_data[[i]], ylim=yl, alpha=0.01, main=list_objects[[i]] , xlab='', ylab='', colSig='red',
+#                  cex.axis=1, cex.main=1)
+#   abline(h=c(-1,1),col="dodgerblue",lwd=2)
+#   }
+# 
+# title(main = paste0("MA plots for DE analysis, alpha=0.01"),
+#       xlab = "Mean expression",
+#       ylab = "Log fold change",
+#       outer = TRUE, line = 1,
+#       cex.lab=1.5, cex.main=1.5)
+# 
+# dev.off()
+```
+
+
+
+# 11. Custom MA plots for some of the SG datasets, with genes extracted from the intron-exon analysis (eisa)
+
+```{r, function_modifMA}
+##############################
+#ORIG
+# my_plot <- function( object, ylim = NULL,
+#                      colNonSig = "gray32", colSig = "red3", colLine = "#ff000080", colEmph = "blue",
+#                      log = "x", cex=0.45, xlab="mean expression", ylab="log fold change", ... ) {
+#   if( !( ncol(object) == 3 & inherits( object[[1]], "numeric" ) & inherits( object[[2]], "numeric" )
+#          & inherits( object[[3]], "logical" ) ) ) {
+#     stop( "When called with a data.frame, plotMA expects the data frame to have 3 columns, two numeric ones for mean and log fold change, and a logical one for significance.")
+#    }
+#   colnames(object) <- c( "mean", "lfc", "sig" )
+#   object = subset( object, mean != 0 )
+#   py = object$lfc
+#   
+#   if( is.null(ylim) )
+#     ylim = c(-1,1) * quantile(abs(py[is.finite(py)]), probs=0.99) * 1.1
+#    
+#   plot(object$mean, pmax(ylim[1], pmin(ylim[2], py)),
+#        log=log, pch=ifelse(py<ylim[1], 6, ifelse(py>ylim[2], 2, 16)),   # down-triangle (6) if smaller than ylim[1], up-triangle (2) if larger than ylim[2]; else just circles (16)
+#        cex=cex, col=ifelse( object$sig, colSig, colNonSig ), xlab=xlab, ylab=ylab, ylim=ylim, ...)
+#   abline( h=0, lwd=4, col=colLine )
+# }
+##############################################
+
+# modified code from the github of the DESeq2 repo (?)
+f.MAplot_geneList <- function( object, ylim = NULL,
+                     colNonSig = "gray78", colSig = "gray53", colLine = "pink", colEmph = "red", colAmbig= "blue",
+                     log = "x", cex=0.45, xlab="mean expression", ylab="log fold change", ... )
+  {if( !( ncol(object) == 4 & inherits( object[[1]], "numeric" ) & inherits( object[[2]], "numeric" )
+         & inherits( object[[3]], "logical" ) & inherits( object[[4]], "logical" )) )
+
+    {stop( "When called with a data.frame, plotMA expects the data frame to have 3 columns, two numeric ones for mean and log fold change, and a logical one for significance.")
+    }
+
+  colnames(object) <- c( "mean", "lfc", "sig", "belong" )
+  object = subset( object, mean != 0 )
+  py = object$lfc
+
+  if( is.null(ylim) )
+    ylim = c(-1,1) * quantile(abs(py[is.finite(py)]), probs=0.99) * 1.1
+
+  plot(object$mean, pmax(ylim[1], pmin(ylim[2], py)),
+       log=log, pch=ifelse(py<ylim[1], 6, ifelse(py>ylim[2], 2, 16)),   # down-triangle (6) if smaller than ylim[1], up-triangle (2) if larger than ylim[2]; else just circles (16)
+       cex=cex, 
+       #col=ifelse( object$sig & object$belong, colEmph, ifelse(object$sign == FALSE & object$belong, colAmbig, ifelse(object$sign & object$belong == FALSE, colSig, colNonSig)) ),
+       #col=ifelse(object$sig & object$belong, colEmph, ifelse(object$belong, colAmbig, colNonSig) ),   # only the top2000 circRNA genes
+       col=ifelse(object$sig ==TRUE & object$belong ==TRUE, colEmph, ifelse(object$sig==FALSE & object$belong==TRUE, colAmbig, ifelse(object$sig==TRUE & object$belong==FALSE, colSig, colNonSig)) ),
+       xlab=xlab, ylab=ylab, ylim=ylim, ...)
+  abline( h=0, lwd=4, col=colLine )
+  }
+############################################
+```
+
+
+
+```{r, MA_plots-sameYaxis-eisaGenes}
+### Done by hand - go back to the beginning and make this standardized, easier
+
+# import the data with top 2000 genes from the eisa analysis
+path_orig <- "/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/4_intron_analysis_bam"
+
+
+#DON'T CHANGE THE ORDER OF THE OBJECTS!!!
+
+list_objects=list(#"totRNA_ars_vs_mock", "totRNA_HS_vs_mock", "totRNA_NaCl_vs_mock", "totRNA_UV_vs_mock",
+                   "sgRNA_HS_vs_ars", "sgRNA_NaCl_vs_ars", "sgRNA_UV_vs_ars",
+                   "sgRNA_NaCl_vs_HS", "sgRNA_UV_vs_HS",
+                   "sgRNA_UV_vs_NaCl")
+
+list_data <- list(#
+                "DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr", "DE_gene_sgRNA_NaCl_vs_sgRNA_arsenite_ashr", "DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr",
+                "DE_gene_sgRNA_NaCl_vs_sgRNA_HS_ashr", "DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr", 
+                "DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr")
+
+
+for (i in 1:length(list_objects) ) {
+  assign(paste0("top2000_", list_objects[[i]]), read.delim(paste0(path_orig, "/top2000_", list_objects[[i]], '.tsv'), header = TRUE, sep='\t', na.strings="NA", row.names = 1, stringsAsFactors = F) )
+  }
+
+  DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr$listGenes <- rownames(DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr) %in% rownames(top2000_sgRNA_HS_vs_ars)
+  DE_gene_sgRNA_NaCl_vs_sgRNA_arsenite_ashr$listGenes <- rownames(DE_gene_sgRNA_NaCl_vs_sgRNA_arsenite_ashr) %in% rownames(top2000_sgRNA_NaCl_vs_ars)
+  DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr$listGenes <- rownames(DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr) %in% rownames(top2000_sgRNA_UV_vs_ars)
+   
+  DE_gene_sgRNA_NaCl_vs_sgRNA_HS_ashr$listGenes <- rownames(DE_gene_sgRNA_NaCl_vs_sgRNA_HS_ashr) %in% rownames(top2000_sgRNA_NaCl_vs_HS)
+  DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr$listGenes <- rownames(DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr) %in% rownames(top2000_sgRNA_UV_vs_HS)
+     
+  DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr$listGenes <- rownames(DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr) %in% rownames(top2000_sgRNA_UV_vs_NaCl)
+############################################
+  
+  #doesn't work
+  #assign(get(list_data[[2]])$listGenes, rownames(list_data[[2]]) %in% rownames(list_objects[[2]]) )
+############################################
+  
+  DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr$padj <- DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr$padj < 0.05
+  DE_gene_sgRNA_NaCl_vs_sgRNA_arsenite_ashr$padj <- DE_gene_sgRNA_NaCl_vs_sgRNA_arsenite_ashr$padj < 0.05
+  DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr$padj <- DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr$padj < 0.05
+   
+  DE_gene_sgRNA_NaCl_vs_sgRNA_HS_ashr$padj <- DE_gene_sgRNA_NaCl_vs_sgRNA_HS_ashr$padj < 0.05
+  DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr$padj <- DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr$padj < 0.05
+     
+  DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr$padj <- DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr$padj < 0.05
+############################################
+
+  DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr <- DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr[c(1,2,5,6)]
+  DE_gene_sgRNA_NaCl_vs_sgRNA_arsenite_ashr <- DE_gene_sgRNA_NaCl_vs_sgRNA_arsenite_ashr[c(1,2,5,6)]
+  DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr <- DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr[c(1,2,5,6)]
+
+  DE_gene_sgRNA_NaCl_vs_sgRNA_HS_ashr <- DE_gene_sgRNA_NaCl_vs_sgRNA_HS_ashr[c(1,2,5,6)]
+  DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr <- DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr[c(1,2,5,6)]
+
+  DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr <- DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr[c(1,2,5,6)]
+################################
+```
+
+
+```{r, MAmodif_plot}
+# png("./MA_CIRI2_plot_revUV_genesEISA.png", width=850, height=475, units = "px", bg = "white")
+# # 
+# list_toPlot <- list("DE_gene_sgRNA_UV_vs_sgRNA_arsenite_ashr", "DE_gene_sgRNA_UV_vs_sgRNA_HS_ashr", 
+#                     "DE_gene_sgRNA_UV_vs_sgRNA_NaCl_ashr", "DE_gene_sgRNA_HS_vs_sgRNA_arsenite_ashr")
+# 
+# 
+# par(oma = c(3,4,4,1),    # margins for whole plot
+#      mar = c(2,3,2.2,2)  # margins for individual plots
+#     )
+# 
+# yl <- c(-6,6)
+# 
+#  layout(matrix(c(1, 2, 3, 4), 2, 2, byrow=TRUE))
+# # # layout.show(6)
+# # options(scipen=0) # to get scientific notation; the higher, the less the probability of losing scientific notation
+# 
+# for (i in 1:length(list_toPlot) ) {
+#   f.MAplot_geneList(get(list_toPlot[[i]]), ylim=yl, 
+#           main=list_toPlot[[i]] , xlab='', ylab='',
+#                  cex.axis=1, cex.main=1
+#           )
+#   abline(h=c(-1,1),col="dodgerblue",lwd=2)
+#   }
+# 
+# title(main = paste0("MA plots for DE analysis, alpha=0.01"),
+#       xlab = "Mean expression",
+#       ylab = "Log fold change",
+#       outer = TRUE, line = 1,
+#       cex.lab=1.5, cex.main=1.5)
+# ################################################
+# 
+# dev.off()
+```
+
+
+
+```{r, extract-RDIgenes}
+# extract top 2000 genes from each comparison 
+
+list_toExtract <- list("DE_gene_sgRNA_UV_vs_sgRNA_arsenite", "DE_gene_sgRNA_UV_vs_sgRNA_HS", 
+                     "DE_gene_sgRNA_UV_vs_sgRNA_NaCl", "DE_gene_sgRNA_HS_vs_sgRNA_arsenite")
+
+for (i in 1:length(list_toExtract) ) {
+  assign(paste0("top2000_", list_toExtract[[i]],"lfc"), get(paste0(list_toExtract[[i]],"_padj0.05lfc_sort"))[1:2000,]) 
+  #write.table(get(paste0("top2000_", list_toExtract[[i]], "lfc")), file=paste0(path_orig, '/intron_analysis_bam/', "top2000_", list_toExtract[[i]], "_padj0.05lfc_sort", '.tsv'), sep="\t", row.names=TRUE, quote = FALSE)
+}
+
+```
+
+
+
+
+```{r, intron_DE}
+path_inDir <- "/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/"
+
+counts_intron_noNeg <- read.delim(paste0(path_inDir, '/intron_analysis_bam/', 'counts_introns_from_featureCounts_noNeg.tsv'), header = TRUE, sep='\t', na.strings="NA", row.names = 1, stringsAsFactors = F)
+
+
+#check if the col and rows are in the same order:
+#all(rownames(dfmeta_all) == colnames(dfcounts_gene))   ## > FALSE
+all(rownames(dfmeta_all) == colnames(counts_intron_noNeg[,rownames(dfmeta_all)]))
+
+#make dds obj - AND rearrange the columns from the counts df to correspond to the ones in the metadata
+dds_batch_intron <- DESeq2::DESeqDataSetFromMatrix(countData = counts_intron_noNeg[,rownames(dfmeta_all)], colData = dfmeta_all, design = design_batch)
+
+rld_PCA_intron <- plotPCA(rlog(dds_batch_intron, blind = TRUE), intgroup=c("batch", "condition"), returnData=TRUE)
+
+percentVar <- round(100 * attr(rld_PCA_intron, "percentVar"), 1)   # rounded values for each axis of PC variance
+
+ggplot(rld_PCA_intron, aes(PC1, PC2, color=condition, shape=batch)) +
+  geom_point(size=3) +
+  scale_shape_manual(values=c(3, 1, 2))+    # change shapes of symbols
+  scale_size_manual(values=c(8, 8, 8))+     # change sizes of symbols
+  xlab(paste0("PC1: ",percentVar[1])) +
+  ylab(paste0("PC2: ",percentVar[2]))
+```
+
+
+
+
+```{r, Run DESeq}
+res_batch_intron <- DESeq2::DESeq(dds_batch_intron)
+# plotDispEsts(dds_batch_gene)

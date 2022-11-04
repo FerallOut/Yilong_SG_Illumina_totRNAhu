@@ -1,0 +1,243 @@
+---
+title: "2297_Yilong_mRNA_stressGranules_DESeq2"
+output: html_notebook
+toc: true
+---
+
+
+Sample sheet
+
+name    condition       group
+m1      mock    All
+m2      mock    All
+m3      mock    All
+
+s4su1   treat_4sU       Group1
+s4su2   treat_4sU       Group1
+s4su3   treat_4sU       Group1
+
+s4UH1   treat_4sU_puroHigh      Group2
+s4UL3   treat_4sU_puroHigh      Group2
+s4UH3   treat_4sU_puroHigh      Group2
+
+s4UL1   treat_4sU_puroLow       Group3
+s4UL2   treat_4sU_puroLow       Group3
+s4UH2   treat_4sU_puroLow       Group3
+
+U1      treat_UVA       Group4
+U2      treat_UVA       Group4
+U3      treat_UVA       Group4
+
+
+- mock, UVA and 4sU should trigger very mild response in cells
+- 4sU+UVA has a strong effect on cells and induces stress granules. Puromycin High are cells w/o stress granule, puromycin low are cells with stress granules
+
+
+```{r, load-count-data}
+
+#dfolder <- "/data/processing2/balan_Yilong/project_2297_45nG7vuc_mRNA-seq"
+dfolder <- "/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/"
+fcounts_gene <- "counts.tsv"
+
+counts_exon <- read.delim(paste0(dfolder, fcounts_gene), header = TRUE, sep='\t', na.strings="NA" , row.names=1,  stringsAsFactors = F)
+
+## alphanumeric sort of columns
+counts_exon <- counts_exon[,gtools::mixedorder(colnames(counts_exon))]
+# reorder the columns!
+counts_exon <- counts_exon[ , c("m1", "m2", "m3", "s4su1", "s4su2", "s4su3", "s4UH1", "s4UL3", "s4UH3", "s4UL1", "s4UL2", "s4UH2") ]
+
+# remove the all the '_PAR_Y' rows because are empty
+less_counts_exon <- counts_exon[!row.names(counts_exon) %in% row.names(counts_exon[grepl(pattern="_PAR_Y", row.names(counts_exon) ),]),]
+
+# remove the version number
+row.names(less_counts_exon) <- gsub("\\..*","", row.names(less_counts_exon))
+
+
+head(less_counts_exon)
+
+# keep only the needed columns
+drops <- c("s4su1", "s4su2", "s4su3")
+few_counts_exon <- less_counts_exon[ , !(names(less_counts_exon) %in% drops)]
+
+head(few_counts_exon)
+```
+
+
+
+```{r, heatmap-new-plot}
+
+# import genes from Yilong
+genes_Yilong <- read.delim('/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/1a_analysis_bam_default/new_plots/genes.tab', header = F, sep='\t', na.strings="NA")
+
+# subset the file by finding the index of the rows starting with '#'
+#genes_Yilong[grep("^#", genes_Yilong$V1), ]
+indices <- grep("^#", genes_Yilong$V1)
+
+# read each section of the file as a separate df:
+section_names <-genes_Yilong[grep("^#", genes_Yilong$V1), ]$V1
+# reformat names
+section_names <- gsub("#","",section_names) 
+
+section_names[2] <- gsub("-","_",section_names[2])
+section_names[3] <- strsplit(section_names[3], ' ')[[1]][1]
+section_names[4] <- gsub(" ","_",section_names[4])
+
+# assign each section to names and headers
+for (i in seq(1, length(indices)-1) ) {
+  assign(section_names[i], genes_Yilong[c((indices[i]+2):indices[i+1]-1), ]  )
+  print(dim(get(section_names[i]))[1])
+}
+
+# load DB to translate the symbols
+library(biomaRt)
+
+# symbols ids read into the 4 df:
+# list available DB that exist in Ensembl:
+#listEnsembl()
+# using Ensembl90
+listEnsemblArchives()
+listEnsembl(version = 91)
+
+ensembl91 <- useEnsembl(biomart = 'genes', 
+                       dataset = 'hsapiens_gene_ensembl',
+                       version = 91)
+
+# retrieve the attributes for the query:
+attr <- listAttributes(ensembl91)
+# what I need is symbol -> ensemblID
+#'hgnc_symbol', 'QQQexternal_gene_name', 'PPPensembl_gene_id', 'hgnc_id'
+		
+# retrieve the filters for the query:
+filters <- listFilters(ensembl91)
+# what filters I want: gene stable id -> 'ensembl_gene_id'
+
+# build a query and run it:
+df.G1_S <- getBM(attributes = c('external_gene_name', 'ensembl_gene_id'),
+		filters = "external_gene_name",
+		values = G1_S$V2[-1],
+		mart = ensembl91)
+
+df.G2_M <- getBM(attributes = c('external_gene_name', 'ensembl_gene_id'),
+		filters = "external_gene_name",
+		values = G2_M$V2[-1],
+		mart = ensembl91)
+
+df.inflammatory <- getBM(attributes = c('external_gene_name', 'ensembl_gene_id'),
+		filters = "external_gene_name",
+		values = Inflammatory$V1[-1],
+		mart = ensembl91)
+
+df.dsRNA_response <- getBM(attributes = c('external_gene_name', 'ensembl_gene_id'),
+		filters = "external_gene_name",
+		values = dsRNA_response$V1[-1],
+		mart = ensembl91)
+
+
+# subset genes for each df
+#subset(df, subset = rownames(df) %in% genelist)
+#counts.G1_S <- subset(less_counts_exon, subset = row.names(less_counts_exon) %in% df.G1_S$ensembl_gene_id)
+#counts.G2_M <- subset(less_counts_exon, subset = row.names(less_counts_exon) %in% df.G2_M$ensembl_gene_id)
+#counts.inflammatory <- subset(less_counts_exon, subset = row.names(less_counts_exon) %in% df.inflammatory$ensembl_gene_id)
+#counts.dsRNA_response <- subset(less_counts_exon, subset = row.names(less_counts_exon) %in% df.dsRNA_response$ensembl_gene_id)
+
+# same as above but now I get to keep the gene symbol names
+counts.G1_S <- merge(less_counts_exon, df.G1_S, by.x='row.names', by.y='ensembl_gene_id', all=FALSE)
+counts.G1_S$cluster <- as.factor(rep("G1_S",dim(counts.G1_S)[1]))
+
+counts.G2_M <- merge(less_counts_exon, df.G2_M, by.x='row.names', by.y='ensembl_gene_id', all=FALSE)
+counts.G2_M$cluster <- as.factor(rep("G2_M",dim(counts.G2_M)[1]))
+
+counts.inflammatory <- merge(less_counts_exon, df.inflammatory, by.x='row.names', by.y='ensembl_gene_id', all=FALSE)
+counts.inflammatory$cluster <- as.factor(rep("Inflammatory (NF-kB)",dim(counts.inflammatory)[1]))
+
+counts.dsRNA_response <- merge(less_counts_exon, df.dsRNA_response, by.x='row.names', by.y='ensembl_gene_id', all=FALSE)
+counts.dsRNA_response$cluster <- as.factor(rep("dsRNA_response",dim(counts.dsRNA_response)[1]))
+
+# heatmaps for each of them with all samples
+# heatmap(as.matrix(counts.G1_S[,c(-1,-ncol(counts.G1_S))]), Rowv = NA, Colv = NA)
+# heatmap(as.matrix(counts.G2_M[,c(-1,-ncol(counts.G2_M))]), Rowv = NA, Colv = NA)
+# heatmap(as.matrix(counts.inflammatory[,c(-1,-ncol(counts.inflammatory))]), Rowv = NA, Colv = NA)
+# heatmap(as.matrix(counts.dsRNA_response[,c(-1,-ncol(counts.dsRNA_response))]), Rowv = NA, Colv = NA)
+
+
+# pull all of them together
+counts.all_samples <- rbind(counts.G1_S, counts.G2_M, counts.inflammatory, counts.dsRNA_response)
+
+## set the 'Row.names' column as row names
+# counts.all_samples <- data.frame(counts.all_samples[,-1], row.names=counts.all_samples[,1])
+
+## not possible because I have 37 duplicated names
+# table(duplicated(counts.all_samples$Row.names))
+# counts.all_samples$external_gene_name[duplicated(counts.all_samples$Row.names)]
+
+## verify:
+# counts.all_samples[counts.all_samples$external_gene_name=='MAFF',]
+```
+
+
+```{r, heatmap1}
+
+# give a different color map
+
+# png("../2297_provisory_heatmap.png",    # create PNG for the heat map        
+#   width = 5*300,        # 5 x 300 pixels
+#   height = 5*300,
+#   res = 300,            # 300 pixels per inch
+#   pointsize = 8)        # smaller font size
+
+my_palette <- colorRampPalette(c("blue", "white", "red"))(n = 500)
+
+# remove the factorial and string columns:
+heatmap(as.matrix(counts.all_samples[,-c(1, ncol(counts.all_samples)-1, ncol(counts.all_samples))]), Rowv = NA, Colv = NA, col=my_palette, main='2297')
+
+
+#dev.off()               # close the PNG device
+
+```
+
+
+```{r, heatmap.2}
+library("pheatmap")
+
+my_sample_col <- data.frame(sample = rep(c("mock", "4su", "4UH", "4UL"), c(3,3,3,3)))
+row.names(my_sample_col) <- colnames(counts.all_samples[,-c(1, ncol(counts.all_samples)-1, ncol(counts.all_samples))])
+
+my_gene_col <- counts.all_samples$cluster
+
+
+#pheatmap(counts.all_samples[,c(-1,-ncol(counts.all_samples))], #annotation_row = counts.all_samples$external_gene_name, 
+#         annotation_col = my_sample_col,
+#          cluster_rows=FALSE, cluster_cols=FALSE)
+
+
+
+x <- counts.all_samples[1:50,]
+
+x.my_gene_col <- x["cluster"]
+
+pheatmap(x[,-c(1, ncol(x)-1, ncol(x))], annotation_row = x.my_gene_col,
+        annotation_col = my_sample_col,
+        cluster_rows=FALSE, cluster_cols=FALSE, 
+        gaps_row = head(as.numeric(cumsum(table(droplevels(x$cluster) ) )), -1),  # break after each cluster
+        #show_rownames=FALSE, 
+        labels_row=x$external_gene_name, #labels_row=x$Row.names
+        cellwidth = 25, cellheight = 3.8, fontsize=4,
+        color = colorRampPalette(rev(c("#D73027", "#FC8D59", "#FEE090", "#FFFFBF", "#E0F3F8", "#91BFDB", "#4575B4")))(10),
+        #color = bluered(90),
+        #kmeans_k = NA, scale="none",
+        )
+
+#gradient.rect(0.125, 0.25, 0.135, 0.75, nslices=7, border=F, gradient="y", col=rev(c("#d53e4f", "#f46d43", "#fdae61", "#fee08b", "#e6f598", "#abdda4", "#ddf1da")))
+#text(x=rep(0.118, 7), y=seq(0.28, 0.72, by=0.07), adj=1, cex=0.8, labels=c("0", "0-1", "1-10", "10-100", "100-500", "500-1000", ">1000"))
+#text(x=0.135, y=0.82, labels="Cases per\n100,000 people", adj=1, cex=0.85)
+#title(main="Incidence of Measles in the US", line=1, oma=T, adj=0.21)
+
+
+y <- as.data.frame(t(rev(as.data.frame(t(x)))))
+z <- y[,-c(1, ncol(y)-1, ncol(y))]
+zz <- as.matrix(sapply(z, as.numeric))
+
+
+
+heatmap(zz, Rowv = NA, Colv = NA, labRow=y[,ncol(y)-1])
+```

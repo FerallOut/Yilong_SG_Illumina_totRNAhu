@@ -1,0 +1,12 @@
+#!/bin/sh
+# properties = {"type": "single", "rule": "ExonIntron", "local": false, "input": ["ProcessedData/AnnotationObjects/database.version.annotation.merge.transcript.region.gtf"], "output": ["ProcessedData/AnnotationObjects/species.database.constitutive.exons.gtf", "ProcessedData/AnnotationObjects/species.database.constitutive.introns.gtf"], "wildcards": {}, "params": {"typekeep": "CDS,C_gene_segment,D_gene_segment,exon,five_prime_UTR,gene,J_gene_segment,lnc_RNA,miRNA,mRNA,ncRNA,ncRNA_gene,pseudogene,pseudogenic_transcript,rRNA,scRNA,snoRNA,snRNA,three_prime_UTR,transcript,tRNA,vaultRNA_primary_transcript,V_gene_segment", "genetypekeep": "gene,ncRNA_gene,pseudogene", "RNAtypekeep": "lnc_RNA,miRNA,mRNA,ncRNA,pseudogenic_transcript,rRNA,scRNA,snoRNA,snRNA,transcript,tRNA,vaultRNA_primary_transcript,V_gene_segment,D_gene_segment,J_gene_segment,C_gene_segment", "gtID": "ID", "genename": "Name", "parentname": "Parent", "exonname": "exon", "intronname": "intron", "typename": "type", "currentdir": "/data/processing3/akhtargroup/sunyd/Projects/Zhou2019FlashHumanDHXuvPairs"}, "log": [], "threads": 50, "resources": {}, "jobid": 65, "cluster": {"memory": "6G"}}
+cd /data/processing3/akhtargroup/sunyd/Projects/Zhou2019FlashHumanDHXuvPairs && \
+/home/suny/miniconda3/envs/snakeRNAPipes/bin/python3.7 \
+-m snakemake ProcessedData/AnnotationObjects/species.database.constitutive.introns.gtf --snakefile /data/processing3/akhtargroup/sunyd/Snakemake/snakeRNAPipes/workflows/FLASH-seq/Snakefile \
+--force -j --keep-target-files --keep-remote \
+--wait-for-files /data/processing3/akhtargroup/sunyd/Projects/Zhou2019FlashHumanDHXuvPairs/.snakemake/tmp.j98frsib ProcessedData/AnnotationObjects/database.version.annotation.merge.transcript.region.gtf /home/suny/miniconda3/envs/snakeRNAPipes/370c99c6 --latency-wait 300 \
+ --attempt 1 --force-use-threads \
+--wrapper-prefix https://bitbucket.org/snakemake/snakemake-wrappers/raw/ \
+--directory /data/processing3/akhtargroup/sunyd/Projects/Zhou2019FlashHumanDHXuvPairs --configfile /data/processing3/akhtargroup/sunyd/Projects/Zhou2019FlashHumanDHXuvPairs/FLASH-seq.config.yaml  --allowed-rules ExonIntron --nocolor --notemp --no-hooks --nolock \
+--mode 2  --use-conda  --conda-prefix /home/suny/miniconda3/envs/snakeRNAPipes  && touch "/data/processing3/akhtargroup/sunyd/Projects/Zhou2019FlashHumanDHXuvPairs/.snakemake/tmp.j98frsib/65.jobfinished" || (touch "/data/processing3/akhtargroup/sunyd/Projects/Zhou2019FlashHumanDHXuvPairs/.snakemake/tmp.j98frsib/65.jobfailed"; exit 1)
+

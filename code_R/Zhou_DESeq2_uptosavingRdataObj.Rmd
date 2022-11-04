@@ -1,0 +1,159 @@
+---
+title: "2218_Yilong_mRNA_stressGranules_DESeq2"
+output: html_notebook
+toc: true
+---
+
+
+Sample sheet
+
+sample name     note    Barcode note-1
+1       total RNA of mock-1     22L005998       collected at 20200215
+2       total RNA of mock-2     22L005999       collected at 20200215
+3       total RNA of mock-3     22L006000       collected at 20200218
+4       total RNA of arsenite-1 22L006001       collected at 20200215
+5       total RNA of arsenite-2 22L006002       collected at 20200218
+6       total RNA of arsenite-3 22L006003       collected at 20200218
+7       total RNA of HS-1       22L006004       collected at 20200218
+8       total RNA of HS-2       22L006005       collected at 20200218
+9       total RNA of HS-3       22L006006       collected at 20200218
+10      total RNA of NaCl-1     22L006007       collected at 20200215
+11      total RNA of NaCl-2     22L006008       collected at 20200218
+12      total RNA of NaCl-3     22L006009       collected at 20200218
+13      total RNA of 4sUV-1     22L006010       collected at 20200215
+14      total RNA of 4sUV-2     22L006011       collected at 20200215
+15      total RNA of 4sUV-3     22L006012       collected at 20200218
+16      SG RNA of arsenite-1    22L006013       collected at 20200215
+17      SG RNA of arsenite-2    22L006014       collected at 20200218
+18      SG RNA of arsenite-3    22L006015       collected at 20200218
+19      SG RNA of HS-1  22L006016       collected at 20200218
+20      SG RNA of HS-2  22L006017       collected at 20200218
+21      SG RNA of HS-3  22L006018       collected at 20200218
+22      SG RNA of  NaCl-1       22L006019       collected at 20200215
+23      SG RNA of  NaCl-2       22L006020       collected at 20200218
+24      SG RNA of  NaCl-3       22L006021       collected at 20200218
+25      SG RNA of UV-1  22L006022       collected at 20200215
+26      SG RNA of UV-2  22L006023       collected at 20200215
+27      SG RNA of UV-3  22L006024       collected at 20200218
+
+```{r, load_libraries}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(DESeq2))
+suppressPackageStartupMessages(library(apeglm))
+suppressPackageStartupMessages(library(ashr))
+suppressPackageStartupMessages(library(pheatmap))
+```
+### Obtaining the differentially expressed genes 
+
+This workflow uses the *DESeq2* R packages. We can start from the counts summarized at gene level, found in:
+
+### Load the data
+```{r, load_data}
+dfolder <- "/data/manke/processing/balan/Yilong_SG_data/2022.03_DE_genes_transcript/"
+fcounts_gene <- "analysis_bam_default/featureCounts_defaultExon/counts.tsv"
+
+dfcounts_gene <- read.delim(paste0(dfolder, fcounts_gene), header = TRUE, sep='\t', na.strings="NA" , row.names=1)
+```
+
+There are `r dim(dfcounts_gene)[1]` genes/ rows and `r dim(dfcounts_gene)[2]` samples/ columns in the data frame.
+
+### Check the metadata
+```{r, check_counts}
+fmeta_all <- "sampleSheets/all_batch_corrected_sampleSheet.tsv"
+dfmeta_all <- read.delim(paste0(dfolder, fmeta_all), header = TRUE, sep='\t', na.strings="NA" , row.names=1)
+```
+
+
+
+```{r, check_input}
+dfcounts_gene  %>% head()
+dfmeta_all  %>% head()
+#dfcounts_gene <- dfcounts_gene %>% column_to_rownames("gene_id") 
+```
+############################
+
+```{r, factoring}
+dfmeta_all$batch <- factor(dfmeta_all$batch, levels=c("collA","collB")) 
+dfmeta_all$condition <- factor(dfmeta_all$condition, levels=c("totRNA_mock","totRNA_arsenite", "totRNA_HS", "totRNA_NaCl", "totRNA_UV", "sgRNA_arsenite", "sgRNA_HS", "sgRNA_NaCl", "sgRNA_UV")) 
+dfmeta_all$group <- factor(dfmeta_all$group, levels=c("All","treatment1" ,"treatment2","treatment3" ,"treatment4")) 
+```
+
+```{r, design}
+#create design
+design_batch <- ~batch + condition
+design <- ~condition
+```
+
+
+```{r, final_check_create_dds_obj}
+#check if the col and rows are in the same order:
+#all(rownames(dfmeta_all) == colnames(dfcounts_gene))   ## > FALSE
+all(rownames(dfmeta_all) == colnames(dfcounts_gene[,rownames(dfmeta_all)]))
+
+#make dds obj - AND rearrange the columns from the counts df to correspond to the ones in the metadata
+dds_batch <- DESeq2::DESeqDataSetFromMatrix(countData = dfcounts_gene[,rownames(dfmeta_all)], colData = dfmeta_all, design = design_batch)
+################################
+```
+
+```{r, plot_PCA_batch}
+#png("./manual_PCA.png", width=1600, height=800, units = "px", bg = "white")
+
+rld_PCA <- plotPCA(rlog(dds_batch, blind = TRUE), intgroup=c("batch", "condition"), returnData=TRUE)
+percentVar <- round(100 * attr(rld_PCA, "percentVar"), 1)   # rounded values for each axis of PC variance
+ggplot(rld_PCA, aes(PC1, PC2, color=condition, shape=batch)) +
+  geom_point(size=3) +
+  scale_shape_manual(values=c(3, 1, 2))+    # change shapes of symbols
+  scale_size_manual(values=c(8, 8, 8))+     # change sizes of symbols
+  xlab(paste0("PC1: ",percentVar[1])) +
+  ylab(paste0("PC2: ",percentVar[2])) 
+
+#dev.off()
+```
+
+
+```{r, DESeq2_batch}
+dds_batch <- DESeq2::DESeq(dds_batch)
+plotDispEsts(dds_batch)
+```
+
+```{r, results}
+fdr=0.05
+lfc_filter=2
+#resultsNames(dds_batch)    # get names of contrasts
+#dfmeta_all$condition       # each condition
+
+## We have 4 comparisons for totalRNA: dfmeta_all$condition[1] vs dfmeta_all$condition[2]-[5]
+
+contrast_tot <- list(c("condition", levels(dfmeta_all$condition)[2], levels(dfmeta_all$condition)[1]), 
+                      c("condition", levels(dfmeta_all$condition)[3], levels(dfmeta_all$condition)[1]),
+                     c("condition", levels(dfmeta_all$condition)[4], levels(dfmeta_all$condition)[1]),
+                       c("condition", levels(dfmeta_all$condition)[5], levels(dfmeta_all$condition)[1]))
+
+#DE_gene_totRNA_arsenite_vs_totRNA_mock <- DESeq2::results(dds_batch, contrast=contrast_tot[[1]], independentFiltering=TRUE, alpha=0.05, lfcThreshold=lfc_filter, pAdjustMethod="BH", parallel=TRUE)
+
+#DE_gene_totRNA_arsenite_vs_totRNA_mock_ashr <- lfcShrink(dds_batch, contrast=contrast_tot[[1]], res=DE_gene_totRNA_arsenite_vs_totRNA_mock, type="ashr")
+
+#DE_gene_totRNA_arsenite_vs_totRNA_mock_apeglm <- lfcShrink(dds_batch, coef="condition_totRNA_arsenite_vs_totRNA_mock", res=DE_gene_totRNA_arsenite_vs_totRNA_mock, type="apeglm", lfcThreshold=lfc_filter)
+
+for (a in contrast_tot){
+  print(paste0("DE_gene_", a[2], "_vs_", a[3]) )
+
+  assign(paste0("DE_gene_", a[2], "_vs_", a[3]), 
+         DESeq2::results(dds_batch, contrast=a, alpha=0.05, pAdjustMethod="BH", parallel=TRUE) )
+  
+  assign(paste0("DE_gene_", a[2], "_vs_", a[3], "_ashr"), 
+         DESeq2::lfcShrink(dds_batch, contrast=a, type="ashr", 
+         res=get(paste0("DE_gene_", a[2], "_vs_", a[3] ) ) 
+         ) 
+  )
+}
+
+
+# drawLines <- function() abline(h=c(-2,2),col="dodgerblue",lwd=2)
+#plotMA(dds, lfcThreshold=lfc_filter); drawLines()
+
+
+#################Stopped here######################
+
+DEseqout <- DESeq_basic(countData = '../featureCounts/counts.tsv', colData = coldata, design =d)
+```

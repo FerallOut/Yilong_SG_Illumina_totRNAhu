@@ -1,0 +1,30 @@
+---
+title: "2218_Yilong_mRNA_stressGranules_sleuth"
+output: html_notebook
+toc: true
+---
+
+
+```{r, load_libraries}
+suppressPackageStartupMessages(library(devtools))
+suppressPackageStartupMessages(library(sleuth))
+suppressPackageStartupMessages(library(shiny))
+#?suppressPackageStartupMessages(library(gridExtra))
+```
+
+
+### Load the data
+```{r, load_data}
+dfolder <- "/data/processing1/bioinfo_core/requests/FANCI_RNA_seq_4stresses/analysis_fastq_free_trim_gtffilter/"
+prefix <- "sleuth_Salmon_batch_"
+
+fscript <- "sleuth_live.R"
+frdsobj <- "so.rds"
+```
+
+### Read in the RDS object with the sleuth values
+```{r, read_RDS}
+
+so = readRDS(paste0(dfolder, prefix, "totalRNA_corrected_sampleSheet.treatment1/", 'so.rds'))
+sleuth_live(so)
+```
