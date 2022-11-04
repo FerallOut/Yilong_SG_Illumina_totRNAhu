@@ -1,0 +1,406 @@
+---
+title: "2218_Yilong_mRNA_stressGranules_DESeq2"
+output: html_notebook
+toc: true
+---
+
+
+
+# 1. Introduction
+- all data is in: 'run_2218/2022.03_DE_genes_transcript/5_SNP_TtoCmutation_analysis/'
+
+- For run #2218, call all the single nucleotide mutations using 'HaplotypeCaller' with the normal settings (SNP vcfs in '7b_bam_RG_merge_GATKcorr_HC_vcfs')
+[] filter out based on quality and other parameters (vcfs in '7b_bam_RG_merge_GATKcorr_HC_vcfs_QD2.0_FS60.0_MQ_40.0_HS_13.0_MQRS12.5' - PASS)
+[] discard multiallelic entries (about 1% of the whole count) (vcfs in '10b_plots_mutations' - REF_ALT)
+[] get consensus mutations: (txt files in '10b_plots_mutations/2_consensus_replicates_SNPs_txt'; vcfs in '10b_plots_mutations/3_merged_replicates_SNPs')
+    [] retain only mutations that are present at least in 2 replicates (files with '_gt2')
+    [] retain only mutations that are present in all 3 replicates (files with 'eq3')
+    [] all mutations present in these files (files with just 'merge')
+- annotate these VCFs (from '10b_plots_mutations/3_merged_replicates_SNPs/')
+- get each type of mutation (e.g. T>C, A>G, etc) with 'bcftools stats' (txts in '10b_plots_mutations/4_mutation_counts')
+    - for plotting, needing: C>A, C>G, C>T, T>A, T>C, T>G
+##############################################
+
+- Plots:
+    - nr mutations/location per sample per length
+    - intron vs exons
+    - in violin plots
+    
+    - totRNA
+    - sgRNA
+    
+    - length: 
+        - short vs long
+        - binning
+        
+    - all reads with mutations
+
+    - retain only mutations that are present at least in 2 replicates
+    - retain only mutations that are present in all 3 replicates 
+    - all mutations regardless of where you find them
+    
+    
+    
+## Sample sheet
+
+sample name     note    Barcode note-1
+1       total RNA of mock-1     22L005998       collected at 20200215
+2       total RNA of mock-2     22L005999       collected at 20200215
+3       total RNA of mock-3     22L006000       collected at 20200218
+4       total RNA of arsenite-1 22L006001       collected at 20200215
+5       total RNA of arsenite-2 22L006002       collected at 20200218
+6       total RNA of arsenite-3 22L006003       collected at 20200218
+7       total RNA of HS-1       22L006004       collected at 20200218
+8       total RNA of HS-2       22L006005       collected at 20200218
+9       total RNA of HS-3       22L006006       collected at 20200218
+10      total RNA of NaCl-1     22L006007       collected at 20200215
+11      total RNA of NaCl-2     22L006008       collected at 20200218
+12      total RNA of NaCl-3     22L006009       collected at 20200218
+13      total RNA of 4sUV-1     22L006010       collected at 20200215
+14      total RNA of 4sUV-2     22L006011       collected at 20200215
+15      total RNA of 4sUV-3     22L006012       collected at 20200218
+16      SG RNA of arsenite-1    22L006013       collected at 20200215
+17      SG RNA of arsenite-2    22L006014       collected at 20200218
+18      SG RNA of arsenite-3    22L006015       collected at 20200218
+19      SG RNA of HS-1  22L006016       collected at 20200218
+20      SG RNA of HS-2  22L006017       collected at 20200218
+21      SG RNA of HS-3  22L006018       collected at 20200218
+22      SG RNA of  NaCl-1       22L006019       collected at 20200215
+23      SG RNA of  NaCl-2       22L006020       collected at 20200218
+24      SG RNA of  NaCl-3       22L006021       collected at 20200218
+25      SG RNA of UV-1  22L006022       collected at 20200215
+26      SG RNA of UV-2  22L006023       collected at 20200215
+27      SG RNA of UV-3  22L006024       collected at 20200218
+
+
+
+```{r, install-libraries, warning=FALSE, error=FALSE}
+# remove all loaded packages
+#invisible(lapply(paste0('package:', names(sessionInfo()$otherPkgs)), detach, character.only=TRUE, unload=TRUE))
+
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+# install.packages("BiocManager")
+# 
+# BiocManager::install(c("GenomicFeatures", "ggplot2")) 
+
+
+
+# another try:
+# suppressPackageStartupMessages({
+#     invisible(lapply(c("ggbio", "biovizBase", "data.table", 
+#         "TxDb.Hsapiens.UCSC.hg19.knownGene", 
+#         "org.Hs.eg.db"),
+#         require, character.only = TRUE))})
+```
+
+```{r, load-libraries}
+suppressPackageStartupMessages(library(GenomicFeatures))
+suppressPackageStartupMessages(library(AnnotationDbi))
+suppressPackageStartupMessages(library(ggplot2))
+```
+
+
+### Load the data
+```{r, annotations, message=FALSE, warning=FALSE, include=FALSE}
+path_scripts <- "/data/manke/group/balan/projects/Yilong_SG_Illumina_totRNAhu/code_R"
+proj_wd <- "/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/4_intron_analysis_bam/10_plot_intronLengths/"
+
+
+# ## create a TxDb out of alternative sources of gene annotations (gtf file from version 27)
+# gtf_ver27 <- "/data/repository/organisms/GRCh38_ensembl/gencode/release_27/genes.gtf"
+# txHu_v27 <- makeTxDbFromGFF(file = gtf_ver27, format = "auto", organism = "Homo sapiens")
+# 
+# ## save TxDb object
+# AnnotationDbi::saveDb(txHu_v27, paste(proj_wd, 'txHu_v27.TxDb', sep='/') )
+
+## load TxDb object, to save time
+txHu_v27 <- AnnotationDbi::loadDb(paste(proj_wd, 'txHu_v27.TxDb', sep='/'))
+#txHu_v27_4.1 <- AnnotationDbi::loadDb(paste(proj_wd, 'txHu_v27_4.1.TxDb', sep='/'))
+
+## retain only the data for the main chromosomes (no contigs, no MT)
+```
+
+
+```{r, get_longest_transcript}
+# retrieve transcript lengths
+txlen <- transcriptLengths(txHu_v27, with.utr5_len=TRUE, with.utr3_len=TRUE)
+setDT(txlen)
+txlen$len <- rowSums(as.matrix(txlen[, .(tx_len, utr5_len, utr3_len)]))
+setkey(txlen, gene_id, len, tx_id)
+
+# filter longesttranscript by gene_id
+ltx <- txlen[!is.na(gene_id)][, tail(.SD,1), by=gene_id]$tx_id
+
+# filter txdb object
+txb <- as.list(txHu_v27)
+txb$transcripts <- txb$transcripts[txb$transcripts$tx_id %in% ltx, ]
+txb$splicings <- txb$splicings[txb$splicings$tx_id %in% ltx,]
+txb$genes <- txb$genes[txb$genes$tx_id %in% ltx,]
+txb <- do.call(makeTxDb, txb)
+```
+
+
+
+```{r, explore-TxDb-obj}
+#keytypes(txHu_v27)
+#columns(txHu_v27)
+
+# #get introns grouped by transcript
+intr_byTranscr <- intronsByTranscript(txb, use.names=TRUE)
+
+##get the length of all introns but not the length of combined intron per transcript.
+##mean, median all intron 
+#summary(width(unlist(intr_byTranscr)))
+
+
+##get the length of all introns within a transcript
+#sum(width(intr_byTranscr))
+
+
+## get values for each intron
+v.len_intron <- width(unlist(intr_byTranscr))
+########################
+
+## plot relative frequency (%) to log10 of intron length
+# get data as a df instead of a vector (easier to plot) 
+df.rel_freq <- as.data.frame(table(v.len_intron)/length(v.len_intron))
+# rename and convert the columns into numeric
+colnames(df.rel_freq) <- c('intron_len','rel_freq')
+df.rel_freq$rel_freq <- as.numeric(format(round(df.rel_freq$rel_freq*100, 4), nsmall=4))            # char -> numeric; make it % by multiplying with 100
+df.rel_freq$intron_len <- as.numeric(levels(df.rel_freq$intron_len))[df.rel_freq$intron_len]        # factor -> numeric
+#######################################################################################################################
+
+```
+
+
+```{r, prev_trials}
+# # get the density estimate
+dens_trys <- density(log10(v.len_intron))
+
+
+# plot density estimate log10
+plot(dens_trys, type="l", frame=FALSE,
+     main="Distribution of intron length values (in v27)", xlab="Intron length (log10)", ylab="Density")
+abline(v=mean(log10(v.len_intron)), col="red")
+abline(v=quantile(log10(v.len_intron), 0.75), col="blue")
+abline(v=quantile(log10(v.len_intron), 0.95), col="green")
+abline(v=quantile(log10(v.len_intron), 0.99), col="orange")
+
+
+legend("topleft",
+       legend=c("median", "75th percentile", "95th percentile", "99th percentile"),
+       col=c("red", "blue", "green", "orange"),
+       lty=1)
+########################################
+
+# remove the very small introns
+v.len_intronGt35 <- v.len_intron[v.len_intron > 35]
+
+dens_trysGt35 <- density(log10(v.len_intronGt35))
+plot(dens_trysGt35, type="l", frame=FALSE,
+     main="Distribution of intron length values > 35 bp (in v27)", xlab="Intron length (log10)", ylab="Density")
+abline(v=mean(log10(v.len_intronGt35)), col="red")
+abline(v=quantile(log10(v.len_intronGt35), 0.75), col="blue")
+abline(v=quantile(log10(v.len_intronGt35), 0.95), col="green")
+abline(v=quantile(log10(v.len_intronGt35), 0.99), col="orange")
+
+
+legend("topleft",
+       legend=c("median", "75th percentile", "95th percentile", "99th percentile"),
+       col=c("red", "blue", "green", "orange"),
+       lty=1)
+######################################
+
+
+# # plot density estimate log10
+# plot(dens_trys, type="l", #frame=FALSE,
+#      main="Distribution of intron length values (in v27)", xlab="Intron length (log10)", ylab="Density",
+#      xaxt="n", yaxt="n")
+# 
+# 
+# 
+# # Labels...
+# at.x <- outer(1:9, 10^(-6:0) )
+# # lab.x <- ifelse(log10(at.x) %% 1 == 0,
+# #                 sapply(at.x, function(i)
+# #                   as.expression(bquote(10^.(log10(i))))
+# #                 ), NA)
+# 
+# lab.x <- ifelse(log10(at.x) %% 1 == 0,
+#                 sapply(at.x, function(i){
+#                   j=abs(log10(i)); as.expression(bquote(10^.(j))) }
+#                 ), NA)
+# 
+# 
+# axis(1, at = at.x, labels = rev(lab.x), las = 1)
+# grid (NULL,NULL, lty = 6, col = "cornsilk2")
+
+```
+
+```{r, test2}
+# need to rearrange the data
+# first split the expression into 7 pieces of 9 values
+
+
+
+
+# g2 <- function(text) {
+#     one<-strsplit(text, ",")[[1]]
+#     for (j in seq(from=1, to=63, by=9)) {
+#     do.call(paste, c(lapply(seq_len(9), function(i) {idx <- rep(FALSE,9); idx[i] <-TRUE; one[idx] }), sep=', ' ))
+#     }
+# }
+#
+# g2(as.character(lab.x))
+
+
+# paste the chunks together in reverse order
+
+# axis(1, at = at.x[10:18], labels = rev(lab.x)[10:18], las = 1)
+# grid (NULL,NULL, lty = 6, col = "cornsilk2")
+########################################
+
+
+
+# #get the relationship between transcript and gene
+#gene_ID <- AnnotationDbi::mapIds(txHu_v27, names(intr_byTranscr), "GENEID", "TXNAME")
+```
+
+
+
+```{r, test}
+# set.seed(2) 
+# x = c(1, rnorm(100, 15, 50))
+# y = c(1, rnorm(100, 15, 50))
+# 
+# plot(x, y, col = "black",
+#      log = "xy", xaxt = "n", yaxt = "n",)
+# 
+# # Labels...
+# # at.y <- outer(1:9, 10^(log10(1):log10(100)))
+# # lab.y <- ifelse(log10(at.y) %% 1 == 0,
+# #                 sapply(at.y, function(i)
+# #                   as.expression(bquote(10^.(log10(i))))
+# #                 ), NA)
+# # axis(2, at = at.y, labels = lab.y, las = 1)
+# 
+# at.x <- outer(1:9, 10^(0:log10(100)))
+# lab.x <- ifelse(log10(at.x) %% 1 == 0,
+#                 sapply(at.x, function(i)
+#                   as.expression(bquote(10^.(log10(i))))
+#                 ), NA)
+# axis(1, at = at.x, labels = lab.x, las = 1)
+# grid (NULL,NULL, lty = 6, col = "cornsilk2")
+```
+
+
+Longest introns:
+```{r, long-introns}
+unlist(width(intr_byTranscr))[unlist(width(intr_byTranscr)) == max(v.len_intron)]
+
+unlist(width(intr_byTranscr))[unlist(width(intr_byTranscr)) %in% tail(sort(v.len_intron))]
+#ENST00000487694.7 ENST00000602589.5 ENST00000414318.2 ENST00000447367.6 ENST00000402655.6 ENST00000465127.1 
+#          1160411           1160411           1136472           1097903           1096453           1240120 
+
+
+```
+#################################################
+
+-  longest genes:     Gene Symbols:
+ENST00000465127.1     AK303697, B4E171, B4E171_HUMAN, uc064yne.1;                                     tetraspanin family. Most of these members are cell-surface proteins
+ENST00000402655.6     A8K323, AF395124, FOR, Q5MYT5, Q96KM3, Q96RF2, uc010che.4, WOX1, WWOX_HUMAN     Putative oxidoreductase
+ENST00000447367.6     CALP, KCHIP4, KCIP4_HUMAN, NM_147181, Q3YAC0, Q3YAC1, Q9H2A4, uc062vnx.1        potassium voltage-gated channel interacting protein 4 (KCNIP4)
+ENST00000414318.2     TBC1D5                                                                          TBC1 domain family member 5
+ENST00000602589.5     ROBO2                                                                           roundabout guidance receptor 2
+
+###############################################
+
+
+```{r, EZH1}
+# EZH1 introns:
+EZH1_transcID = c('ENST00000415827', 'ENST00000428826', 'ENST00000585455', 'ENST00000585550', 'ENST00000585893')
+
+#names(unlist(width(intr_byTranscr)))[names(unlist(width(intr_byTranscr))) %like% EZH1_transcID[1]]
+#grep(pattern="ENST00000428826", names(unlist(width(intr_byTranscr))))
+#width(intr_byTranscr)[grep(pattern="ENST00000428826", names(width(intr_byTranscr))) == '162414']
+
+
+#.... ogoing
+```
+
+
+```{r, separate_introns}
+## # plot density estimate log10
+# plot(dens_trys, type="l", frame=FALSE,
+#      main="Distribution of intron length values (in v27)", xlab="Intron length (log10)", ylab="Density")
+# abline(v=mean(log10(v.len_intron)), col="red")
+# abline(v=quantile(log10(v.len_intron), 0.75), col="blue")
+# abline(v=quantile(log10(v.len_intron), 0.95), col="green")
+# abline(v=quantile(log10(v.len_intron), 0.99), col="orange")
+# 
+# 
+# legend("topleft",
+#        legend=c("median", "75th percentile", "95th percentile", "99th percentile"),
+#        col=c("red", "blue", "green", "orange"),
+#        lty=1)
+
+#########################################
+
+# already: v.len_intronGt35 <- v.len_intron[v.len_intron > 35]
+v.len_intronGt35_Lt100k <- v.len_intronGt35[v.len_intronGt35 < 100000]
+v.len_intronGt35_Gt100k <- v.len_intronGt35[v.len_intronGt35 > 100000]
+
+
+
+######################################
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r, load_intron_data}
+dir_intron <- "/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/5_SNP_TtoCmutation_analysis/10b_plots_mutations/5_merged_replicates_SNPs_VEP"
+
+totRNA_HS_intron <- read.delim(paste0(dir_intron, '/test_sgRNA_HS_merge_allFiltSNP_vep_Intron.txt'), header = TRUE, sep='\t', na.strings="NA")
+#length(width(intr_byTranscr))
+##63.236
+
+#unlist(width(intr_byTranscr))[names(unlist(width(intr_byTranscr))) %in% totRNA_HS_intron$Feature]
+#length(lenX)
+##56.535
+
+library(stringr)
+#str_split_fixed(totRNA_HS_intron$X.Location, ":", 2)
+totRNA_HS_intron_sepCol1 <- cbind(str_split_fixed(totRNA_HS_intron$X.Location, ":", 2), totRNA_HS_intron[,-1])
+colnames(totRNA_HS_intron_sepCol1)[1:2] <- c('Chr', 'Position')
+
+# duplicate 'Position', rename and move columns
+totRNA_HS_intron_sepCol1$end <- totRNA_HS_intron_sepCol1$Position
+colnames(totRNA_HS_intron_sepCol1)[2] <- 'start'
+totRNA_HS_intron_rearr <- totRNA_HS_intron_sepCol1[ , c(1:2, ncol(totRNA_HS_intron_sepCol1), (3:ncol(totRNA_HS_intron_sepCol1)-1)[-ncol(totRNA_HS_intron_sepCol1)])]
+
+# change the Strand column from -1 and 1 to - and +
+totRNA_HS_intron_rearr$STRAND <- with(totRNA_HS_intron_rearr, ifelse(STRAND == '-1', '-', '+'))
+
+# NO - make a GenomicRanges object
+gr.totRNA_HS_SNPs <- makeGRangesFromDataFrame(totRNA_HS_intron_rearr, keep.extra.columns = T)
+
+# split the SNPs by transcript (Feature)
+totRNA_HS_intron_rearr2 <- split(gr.totRNA_HS_SNPs,gr.totRNA_HS_SNPs$Feature)
+############################################
+
+
+
+# find the overlaps and keep them -NO
+totRNA_HS_intron_subset_SNPs2 <- subsetByOverlaps(totRNA_HS_intron_rearr2,intr_byTranscr,type='within')
+mcols(totRNA_HS_intron_subset_SNPs2)$SNPs <- as.data.frame(sum(width(totRNA_HS_intron_subset_SNPs2)))
+#mcols(totRNA_HS_intron_subset_SNPs)
+
+```

@@ -55,7 +55,7 @@ sample name     note    Barcode note-1
 ```
 
 ```{r, load-libraries}
-suppressPackageStartupMessages(library(dplyr))
+#suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(eisaR))
 suppressPackageStartupMessages(library(GenomicFeatures))
 suppressPackageStartupMessages(library(TxDb.Hsapiens.UCSC.hg38.knownGene))  # geneID to symbol conversion and for annotation
@@ -63,7 +63,7 @@ suppressPackageStartupMessages(library(QuasR))
 suppressPackageStartupMessages(library(gtools))            # to do alphanumeric sort on column names (+ stringAsFactors=F)
 suppressPackageStartupMessages(library(ensembldb))
 suppressPackageStartupMessages(library(edgeR))
-suppressPackageStartupMessages(library(BiocParallel))
+#suppressPackageStartupMessages(library(BiocParallel))
 ```
 ### 1. Prepare gene annotation
 
@@ -215,9 +215,9 @@ Load exon data and genebody (intron+exon) data.
 
 ```{r, load-count-data}
 # # create the sample sheet for paired-end sequencing:
-path_inDir <- "/data/manke/processing/balan/Yilong_SG_data/2022.03_DE_genes_transcript"
-counts_geneBody <- read.delim(paste0(path_inDir, "/analysis_bam_default/", "featureCounts_geneBody/counts.tsv"), header = TRUE, sep='\t', na.strings="NA", row.names = 1, stringsAsFactors = F)
-counts_exon <- read.delim(paste0(path_inDir, "/analysis_bam_default/", "featureCounts_defaultExon/counts.tsv"), header = TRUE, sep='\t', na.strings="NA", row.names = 1, stringsAsFactors = F)
+path_inDir <- "/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript"
+counts_geneBody <- read.delim(paste0(path_inDir, "/1a_analysis_bam_default/featureCounts_geneBody/counts.tsv"), header = TRUE, sep='\t', na.strings="NA", row.names = 1, stringsAsFactors = F)
+counts_exon <- read.delim(paste0(path_inDir, "/1a_analysis_bam_default/featureCounts_defaultExon/counts.tsv"), header = TRUE, sep='\t', na.strings="NA", row.names = 1, stringsAsFactors = F)
 
 ## alphanumeric sort of columns
 counts_geneBody <- counts_geneBody[,gtools::mixedorder(colnames(counts_geneBody))]
@@ -394,7 +394,7 @@ res_sgRNA_UV_vs_NaCl <- runEISA(   less_counts_exon[c(25:27, 22:24)], counts_int
 ```
 
 ```{r, ploEISA-sgRNA}
-# png(paste0(path_inDir, '/intron_analysis_bam/sgRNA_comparisons/','eisa_plot_sgRNA_LFC_revUV.png'), width=1600, height=800, units = "px", bg = "white")
+# png(paste0(path_inDir, '/4_intron_analysis_bam/sgRNA_comparisons/','eisa_plot_sgRNA_LFC_revUV_redone2.png'), width=1600, height=800, units = "px", bg = "white")
 # 
 # par(oma = c(3,4,4,1),    # margins for whole plot
 #     mar = c(3,4,3.2,1)  # margins for individual plots
@@ -489,13 +489,13 @@ sum(res_totRNA_NaCl_vs_mock$tab.ExIn$FDR < 0.05)
 sum(res_totRNA_UV_vs_mock$tab.ExIn$FDR < 0.05)
 
 
-# comparison of contrasts
+# # comparison of contrasts
 # diag(cor(res_totRNA_ars_vs_mock$contrasts[ids, ], res_totRNA_ars_vs_mock_o$contrasts[ids, ]))
 # plot(res_totRNA_ars_vs_mock$contrasts[ids, 3], res_totRNA_ars_vs_mock_o$contrasts[ids, 3], pch = "*",
 #      xlab = "Interaction effects for modelSamples=FALSE",
 #      ylab = "Interaction effects for modelSamples=TRUE")
-
-# # comparison of interaction significance
+# 
+# # # comparison of interaction significance
 # plot(-log10(res_totRNA_ars_vs_mock$tab.ExIn[ids, "FDR"]), -log10(res_totRNA_ars_vs_mock_o$tab.ExIn[ids, "FDR"]), pch = "*",
 #      xlab = "-log10(FDR) for modelSamples=FALSE",
 #      ylab = "-log10(FDR) for modelSamples=TRUE")
@@ -794,7 +794,7 @@ head(less_counts_exon)
 head(less_counts_geneBody)
 
 # import genes from Yilong
-genes_Yilong <- read.delim('/data/manke/processing/balan/Yilong_SG_data/2022.03_DE_genes_transcript/analysis_bam_default/new_plots/genes.tab', header = F, sep='\t', na.strings="NA")
+genes_Yilong <- read.delim('/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/1a_analysis_bam_default/new_plots/genes.tab', header = F, sep='\t', na.strings="NA")
 
 # subset the file by finding the index of the rows starting with '#'
 #genes_Yilong[grep("^#", genes_Yilong$V1), ]
@@ -823,41 +823,43 @@ library(biomaRt)
 #listEnsembl()
 # using Ensembl90
 listEnsemblArchives()
-listEnsembl(version = 90)
 
-ensembl90 <- useEnsembl(biomart = 'genes', 
+## HAD TO CHANGE FROM VERSION 90 TO VERSION 91!!
+listEnsembl(version = 91)
+
+ensembl91 <- useEnsembl(biomart = 'genes', 
                        dataset = 'hsapiens_gene_ensembl',
-                       version = 90)
+                       version = 91)
 
 # retrieve the attributes for the query:
-attr <- listAttributes(ensembl90)
+attr <- listAttributes(ensembl91)
 # what I need is symbol -> ensemblID
 #'hgnc_symbol', 'QQQexternal_gene_name', 'PPPensembl_gene_id', 'hgnc_id'
 		
 # retrieve the filters for the query:
-filters <- listFilters(ensembl90)
+filters <- listFilters(ensembl91)
 # what filters I want: gene stable id -> 'ensembl_gene_id'
 
 # build a query and run it:
 df.G1_S <- getBM(attributes = c('external_gene_name', 'ensembl_gene_id'),
 		filters = "external_gene_name",
 		values = G1_S$V2[-1],
-		mart = ensembl90)
+		mart = ensembl91)
 
 df.G2_M <- getBM(attributes = c('external_gene_name', 'ensembl_gene_id'),
 		filters = "external_gene_name",
 		values = G2_M$V2[-1],
-		mart = ensembl90)
+		mart = ensembl91)
 
 df.inflammatory <- getBM(attributes = c('external_gene_name', 'ensembl_gene_id'),
 		filters = "external_gene_name",
 		values = Inflammatory$V1[-1],
-		mart = ensembl90)
+		mart = ensembl91)
 
 df.dsRNA_response <- getBM(attributes = c('external_gene_name', 'ensembl_gene_id'),
 		filters = "external_gene_name",
 		values = dsRNA_response$V1[-1],
-		mart = ensembl90)
+		mart = ensembl91)
 
 
 # subset genes for each df
@@ -898,7 +900,7 @@ dev.off()               # close the PNG device
 
 
 # import the data with top 2000 genes from the eisa analysis
-path_orig <- "/data/manke/processing/balan/Yilong_SG_data/2022.03_DE_genes_transcript/intron_analysis_bam"
+path_orig <- "/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/4_intron_analysis_bam"
 
 
 # #DON'T CHANGE THE ORDER OF THE OBJECTS!!!
@@ -912,12 +914,17 @@ list_toExtract <- list("DE_gene_sgRNA_UV_vs_sgRNA_arsenite", "DE_gene_sgRNA_UV_v
                      "DE_gene_sgRNA_UV_vs_sgRNA_NaCl", "DE_gene_sgRNA_HS_vs_sgRNA_arsenite")
 
 
+## CREATED ALREADY WITH THE FOLLOWING
 for (i in 1:length(list_toExtract) ) {
   assign(paste0("top2000_", list_toExtract[[i]], "_padj0.05lfc_sort"), read.delim(paste0(path_orig, '/', "top2000_", list_toExtract[[i]], "_padj0.05lfc_sort", '.tsv'), header = TRUE, sep='\t', na.strings="NA", row.names = 1, stringsAsFactors = F) )
 }
 
 
-# png(paste0(path_inDir, '/intron_analysis_bam/sgRNA_comparisons/','eisa_plot_sgRNA_LFC_revUV.png'), width=1600, height=800, units = "px", bg = "white")
+
+
+
+
+ png(paste0(path_inDir, '/4_intron_analysis_bam/sgRNA_comparisons/','eisa_plot_sgRNA_LFC_revUV2.png'), width=1600, height=800, units = "px", bg = "white")
 
 par(oma = c(3,4,4,1),    # margins for whole plot
     mar = c(3,4,3.2,1)  # margins for individual plots
@@ -948,7 +955,7 @@ title(main = "EISA - sgRNA_intron-exon analysis, FDR < 0.05, LFC > 2",
       cex.lab=2, cex.main=2)
 
 # 
-# dev.off()
+ dev.off()
 ```
 
 

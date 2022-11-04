@@ -1,0 +1,432 @@
+---
+title: "2218_mutation_analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Introduction
+- all data is in: 'run_2218/2022.03_DE_genes_transcript/5_SNP_TtoCmutation_analysis/'
+
+[] For run #2218, call all the single nucleotide mutations using 'HaplotypeCaller' with the normal settings (SNP vcfs in '7b_bam_RG_merge_GATKcorr_HC_vcfs')
+[] filter out based on quality and other parameters (vcfs in '7b_bam_RG_merge_GATKcorr_HC_vcfs_QD2.0_FS60.0_MQ_40.0_HS_13.0_MQRS12.5' - PASS)
+[] discard multiallelic entries (about 1% of the whole count) (vcfs in '10b_plots_mutations' - REF_ALT)
+[] get consensus mutations: (txt files in '10b_plots_mutations/2_consensus_replicates_SNPs_txt'; vcfs in '10b_plots_mutations/3_merged_replicates_SNPs')
+    [] retain only mutations that are present at least in 2 replicates (files with '_gt2')
+    [] retain only mutations that are present in all 3 replicates (files with 'eq3')
+    [] all mutations present in these files (files with just 'merge')
+[] get each type of mutation (e.g. T>C, A>G, etc) with 'bcftools stats' (txts in '10b_plots_mutations/4_mutation_counts')
+    [] for plotting, needing: C>A, C>G, C>T, T>A, T>C, T>G
+
+[] Then call the same mutations using the ERC BP_RESOLUTION to get the number of nucleotides that were covered by the sequencing (DBs in '7b_bam_RG_merge_GATKcorr_HC_ERCvcfs', the vcfs in '8b_GATKcorr_ERC_GenoGVCFs', filtered vcfs in '8c_GATKcorr_ERC_VarFilt_DPgt10').
+    [] get the bases number in each sample (in '8c_GATKcorr_ERC_VarFilt_DPgt10/trial1_counts_each_rep_sep/', final file with all values: 'counts_bases.txt')
+    [] get the bases number in each experimental condition (in '8c_GATKcorr_ERC_VarFilt_DPgt10/trial2_counts_each_sample/', final file with all values: '4_clean/counts_bases*.txt')
+[] Calculate the fraction of a particular nucleotide that mutates (e.g. T>C*100/T) 
+
+    [] calculate the mutations (HERE IN R)
+##############################################
+
+- Plots:
+    - counts
+    - frequencies
+    - counts/10^3 bp
+    
+    - totRNA
+    - sgRNA
+    
+    - all reads with mutations
+    - ~~only reads with max 1 mut~~
+    
+    - retain only mutations that are present at least in 2 replicates
+    - retain only mutations that are present in all 3 replicates 
+    - all mutations regardless of where you find them
+
+
+### With BCFtools ###
+```{r pressure, echo=FALSE}
+path_dir="/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/5_SNP_TtoCmutation_analysis/bcftools_call_mut01"
+
+# output files from 'vcfstats' with formula:
+path_unfiltered_query="/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/5_SNP_TtoCmutation_analysis/bcftools_call_mut01/unfiltered_data.txt"
+path_filtered_query="/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/5_SNP_TtoCmutation_analysis/bcftools_call_mut01/filtered_data/filtered_data.txt"
+
+# find out what type of data you have and then load the file faster:
+sampleData <- read.delim(path_unfiltered_query, header = TRUE, nrows = 5)
+classes <- sapply(sampleData, class)
+
+unfiltered_query <- read.delim(path_unfiltered_query, header = TRUE, sep='\t', na.strings="NA", colClasses=classes)
+filtered_query <- read.delim(path_filtered_query, header = TRUE, sep='\t', na.strings="NA", colClasses=classes)
+
+head(unfiltered_query)
+head(filtered_query)
+```
+
+```{r bcftools_stats}
+# get mean for the repeats
+#results=data.frame(apply(  array(as.matrix(df1[,-1]), c(nrow(df1), 3, ncol(df1)/3)  ), 3, rowMeans)  )
+    # array( df, c(12, 3, 9))                       - create an array of 9 df made each of 3-columns data frames
+    # apply( array( df, c(12, 3, 9)), 3, rowMeans)  - calculate the rowMeans for each df made of 3-columns
+    # apply( matrix,                  1/2,  f): input is a matrix. output is a vector, where element i is f(row/col i of the matrix)
+#results=cbind(df1$Gene, results)
+
+results_unfilter <- data.frame(apply(array(as.matrix(unfiltered_query[,-1]), c(nrow(unfiltered_query),3, ncol(unfiltered_query)/3)),3, rowMeans))
+
+results_unfilter <- cbind(unfiltered_query$mutation, results_unfilter)
+
+colnames(results_unfilter) <- c ('mutation', "totRNA_mock","totRNA_arsenite", "totRNA_HS", "totRNA_NaCl", "totRNA_UV", "sgRNA_arsenite", "sgRNA_HS", "sgRNA_NaCl", "sgRNA_UV")
+
+unfilter <- results_unfilter[7:nrow(results_unfilter),]
+###############################
+
+results_filter <- data.frame(apply(array(as.matrix(filtered_query[,-1]), c(nrow(filtered_query),3, ncol(filtered_query)/3)),3, rowMeans))
+
+results_filter <- cbind(filtered_query$mutation, results_filter)
+
+colnames(results_filter) <- c ('mutation', "totRNA_mock","totRNA_arsenite", "totRNA_HS", "totRNA_NaCl", "totRNA_UV", "sgRNA_arsenite", "sgRNA_HS", "sgRNA_NaCl", "sgRNA_UV")
+
+filter <- results_filter[7:nrow(results_filter),]
+```
+
+
+
+```{r mpileup_unfilter_counts}
+#png(paste0(path_dir, "/unfiltered_mpileup_T2C.png"), width=1600, height=800, units = "px", bg = "white")
+#library(ggplot2)
+
+#ggplot(results_unfilter, aes(x=mutation))+  
+#	geom_bar(stat="identity", position=position_dodge()) +  
+#	labs(y="Count", title="SNP counts")
+
+# p <- ggplot(data=unfilter, aes(x=mutation, y=totRNA_mock)) +
+#     geom_bar(stat="identity", position=position_dodge())
+# p
+
+# re-assign mutation column as rownames
+df_unfilter <- unfilter[,-1]
+rownames(df_unfilter) <- unfilter[,1]
+
+barplot(as.matrix(df_unfilter), col = c("lightblue", "mistyrose", "lightcyan", "lavender", "red", "cornsilk"),
+        legend = rownames(df_unfilter), 
+        xlab = "sample", ylab = "mutation counts",
+        main = "Raw plot for single nucleotide substitutions (1mut/read) #2218",
+        beside = TRUE)
+#dev.off()
+```
+
+```{r mpileup_filter_counts}
+#png(paste0(path_dir, "/filtered_mpileup_T2C.png"), width=1600, height=800, units = "px", bg = "white")
+
+df_filter <- filter[,-1]
+rownames(df_filter) <- filter[,1]
+
+barplot(as.matrix(df_filter), col = c("lightblue", "mistyrose", "lightcyan", "lavender", "red", "cornsilk"),
+        legend = rownames(df_filter), 
+        xlab = "sample", ylab = "mutation counts",
+        main = "Single nucleotide substitutions (Q>20, DP >3, 1mut/read) #2218",
+        beside = TRUE)
+#dev.off()
+```
+```{r mpileup_unfilter_divSum}
+#png(paste0(path_dir, "/unfiltered_mpileup_T2C_divSum.png"), width=1600, height=800, units = "px", bg = "white")
+library(dplyr)
+
+
+df_unfilter_divSum <- df_unfilter %>%
+    mutate_if(is.numeric, funs(./sum(.))) 
+
+barplot(as.matrix(df_unfilter_divSum), col = c("lightblue", "mistyrose", "lightcyan", "lavender", "red", "cornsilk"),
+        legend = rownames(df_unfilter), 
+        xlab = "sample", ylab = "mutation frequency (counts mut/tot mut)",
+        main = "Raw plot for single nucleotide substitutions (1mut/read) #2218",
+        beside = TRUE)
+#dev.off()
+```
+
+```{r mpileup_filter_divSum}
+#png(paste0(path_dir, "/filtered_mpileup_T2C_divSum.png"), width=1600, height=800, units = "px", bg = "white")
+
+df_filter_divSum <- df_filter %>%
+    mutate_if(is.numeric, funs(./sum(.))) 
+
+barplot(as.matrix(df_filter_divSum), col = c("lightblue", "mistyrose", "lightcyan", "lavender", "red", "cornsilk"),
+        legend = rownames(df_filter), 
+        xlab = "sample", ylab = "mutation frequency (counts mut/tot mut)",
+        main = "mutation frequency (counts mut/tot mut) (Q>20, DP >3, 1mut/read) #2218",
+        beside = TRUE)
+#dev.off()
+```
+
+
+
+
+
+
+
+
+### samples With HaplotypeCaller ###
+
+```{r load_data_mut, echo=FALSE}
+path_dir <- "/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/5_SNP_TtoCmutation_analysis"
+in_mut <- "10b_plots_mutations/4_mutation_counts"
+
+l.files_mut <- list.files(path = paste0(path_dir, '/', in_mut), pattern = "*.txt", all.files = FALSE,
+           full.names = FALSE, recursive = FALSE,
+           ignore.case = FALSE, include.dirs = FALSE, no.. = FALSE)
+
+# load files with mutations
+for (i in 1:length(l.files_mut)) assign(l.files_mut[i], 
+                                         read.delim(paste0(path_dir, '/', in_mut, '/', l.files_mut[i]), header=TRUE, sep = "\t", row.names=1))
+get(l.files_mut[1])
+
+
+# load files with mutations, but only the necessary ones: C>A, C>G, C>T, T>A, T>C, T>G
+l.needed_mut <- c('C>A', 'C>G', 'C>T', 'T>A', 'T>G', 'T>C')
+#df[l.needed_mut]
+
+for (i in 1:length(l.files_mut)) assign(paste0(l.files_mut[i], '_subset'), get(l.files_mut[i])[l.needed_mut,])
+get(l.files_mut[1])[l.needed_mut,]
+```
+
+
+```{r load_data_base, echo=FALSE}
+in_bases <- "8c_GATKcorr_ERC_VarFilt_DPgt10/trial1_counts_each_rep_sep/2_clean/"
+
+l.files_base <- list.files(path = paste0(path_dir, '/', in_bases), pattern = "test*", all.files = FALSE,
+           full.names = FALSE, recursive = FALSE,
+           ignore.case = FALSE, include.dirs = FALSE, no.. = FALSE)
+
+# load files with mutations
+for (i in 1:length(l.files_base)) assign(l.files_base[i], 
+                                         read.delim(paste0(path_dir, '/', in_bases, '/', l.files_base[i]), header=TRUE, sep = "\t", row.names=1))
+get(l.files_base[1])
+
+# load files with base numbers, but only the necessary ones: C and T
+l.needed_base <- c('C', 'T')
+#df[l.needed_base]
+
+for (i in 1:length(l.files_base)) assign(paste0(l.files_base[i], '_subset'), get(l.files_base[i])[l.needed_base,])
+get(l.files_base[1])[l.needed_base,]
+```
+
+
+```{r calculate, echo=FALSE}
+
+#for (i in 1:length(l.files_mut)) assign(paste0(l.files_mut[i], '_divC'), mapply('/', get(paste0(l.files_mut[i], '_subset')[,1:3]), get(paste0(l.files_base[i], '_subset')[,1]))
+#df3 <- mapply('/', mutations_all.txt_subset, mutations_eq3.txt_subset)
+#df4 <- df3 * 100
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### expConditions With HaplotypeCaller ###
+
+```{r load_data_mut, echo=FALSE}
+path_dir <- "/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/5_SNP_TtoCmutation_analysis"
+in_mut <- "10b_plots_mutations/4_mutation_counts"
+in_ERC_bases <- "8c_GATKcorr_ERC_VarFilt_DPgt10/trial2_counts_each_sample/4_clean"
+
+l.files_mut <- list.files(path = paste0(path_dir, '/', in_mut), pattern = "*.txt", all.files = FALSE,
+           full.names = FALSE, recursive = FALSE,
+           ignore.case = FALSE, include.dirs = FALSE, no.. = FALSE)
+
+l.files_ERCbases <- list.files(path = paste0(path_dir, '/', in_ERC_bases), pattern = "counts_bases*", all.files = FALSE,
+           full.names = FALSE, recursive = FALSE,
+           ignore.case = FALSE, include.dirs = FALSE, no.. = FALSE)
+
+# load files with mutations
+for (i in 1:length(l.files_mut)) assign(l.files_mut[i], 
+            read.delim(paste0(path_dir, '/', in_mut, '/', l.files_mut[i]), header=TRUE, sep = "\t", row.names=1))
+
+# need files 1 and 2
+get(l.files_mut[1])
+
+
+for (i in 1:length(l.files_ERCbases)) assign(l.files_ERCbases[i], 
+            read.delim(paste0(path_dir, '/', in_ERC_bases, '/', l.files_ERCbases[i]), header=TRUE, sep = "\t", row.names=1))
+
+# need files 1 and 2
+get(l.files_ERCbases[1])
+###########################################
+
+# rearrange the columns
+l.sample_order <- c('totRNA_mock', 'totRNA_arsenite', 'totRNA_HS', 'totRNA_NaCl', 'totRNA_UV', 'sgRNA_arsenite', 'sgRNA_HS', 'sgRNA_NaCl', 'sgRNA_UV')
+
+#my_data2 <- my_data[, col_order]
+
+f.rearr_cols <- function(df, l.col_order) {
+  my_data2 <- df[, l.col_order]
+  df <- my_data2
+  rm(my_data2)
+  return(df)
+}
+
+ERC_counts_all_ExpCond <- f.rearr_cols(counts_bases_all_expCond.txt, l.sample_order)
+ERC_counts_eq3_ExpCond <- f.rearr_cols(counts_bases_eq3_expCond.txt, l.sample_order)
+
+SNP_counts_all <- f.rearr_cols(mutations_all.txt, l.sample_order)
+SNP_counts_eq3 <- f.rearr_cols(mutations_eq3.txt, l.sample_order)
+###########################################
+
+# load files with mutations, but only the necessary ones: C>A, C>G, C>T, T>A, T>C, T>G
+l.needed_mut <- c('C>A', 'C>G', 'C>T', 'T>A', 'T>G', 'T>C')
+#df[l.needed_mut]
+
+#for (i in 1:length(l.files_mut)) assign(paste0(l.files_mut[i], '_subset'), get(l.files_mut[i])[l.needed_mut,])
+f.keep_rows <- function(df, l.needed_rows_names) {
+  df2 <- df[l.needed_rows_names,]
+  return(df2)
+}
+
+SNP_counts_all_need <- f.keep_rows(SNP_counts_all, l.needed_mut)
+SNP_counts_eq3_need <- f.keep_rows(SNP_counts_eq3, l.needed_mut)
+###########################################
+
+# load files with base numbers, but only the necessary ones: C and T
+l.needed_base <- c('C', 'T')
+
+ERC_counts_all_ExpCond_needed <- f.keep_rows(ERC_counts_all_ExpCond, l.needed_base)
+ERC_counts_eq3_ExpCond_needed <- f.keep_rows(ERC_counts_eq3_ExpCond, l.needed_base)
+```
+
+
+
+
+
+
+```{r load_data_base, echo=FALSE}
+#SNP_counts_all_need 
+#SNP_counts_eq3_need 
+
+#ERC_counts_all_ExpCond_needed
+#ERC_counts_eq3_ExpCond_needed
+##################################
+```
+
+
+```{r calculate, echo=FALSE}
+counts_all_divC_ExpCond_needed <- mapply('/', SNP_counts_all_need[1:3,], ERC_counts_all_ExpCond_needed[1,]) * 100
+counts_all_divT_ExpCond_needed <- mapply('/', SNP_counts_all_need[4:6,], ERC_counts_all_ExpCond_needed[2,]) * 100
+
+counts_eq3_divC_ExpCond_needed <- mapply('/', SNP_counts_eq3_need[1:3,], ERC_counts_eq3_ExpCond_needed[1,]) * 100
+counts_eq3_divT_ExpCond_needed <- mapply('/', SNP_counts_eq3_need[4:6,], ERC_counts_eq3_ExpCond_needed[2,]) * 100
+
+counts_all_ExpCond_vals <- as.data.frame(rbind(counts_all_divC_ExpCond_needed, counts_all_divT_ExpCond_needed))
+counts_eq3_ExpCond_vals <- as.data.frame(rbind(counts_eq3_divC_ExpCond_needed, counts_eq3_divT_ExpCond_needed))
+
+counts_all_ExpCond_vals <- cbind(counts_all_ExpCond_vals, rownames(SNP_counts_all_need) )
+names(counts_all_ExpCond_vals)[ncol(counts_all_ExpCond_vals)] <- "mutations"
+
+counts_eq3_ExpCond_vals <- cbind(counts_eq3_ExpCond_vals, rownames(SNP_counts_eq3_need) )
+names(counts_eq3_ExpCond_vals)[ncol(counts_eq3_ExpCond_vals)] <- "mutations"
+```
+
+```{r, mutate_plot_all}
+#reshape the dataframe to get the format for plotting
+SNPs_all_ExpCond <- reshape2::melt(data=counts_all_ExpCond_vals, id.vars='mutations',
+                variable.names='sample_name', value.name = 'percentage')
+
+# rearrange by 1st column
+SNPs_all_ExpCond_rearr <- SNPs_all_ExpCond[order(SNPs_all_ExpCond$mutations),]
+
+SNPs_all_ExpCond_rearr$mutations <- factor(SNPs_all_ExpCond_rearr$mutations, levels = c('C>A', 'C>G', 'C>T', 'T>A', 'T>G', 'T>C'))
+SNPs_all_ExpCond_rearr[order(SNPs_all_ExpCond_rearr$mutations),]
+
+#########
+
+sample_palette <- c("dark grey", "#ffc425", "royalblue","#00b159", "red", "yellow", "#00aedb", "darkseagreen", "brown1")
+samples_color_colors <-setNames(sample_palette, levels(SNPs_all_ExpCond_rearr$variable))
+
+
+png(paste0(path_dir, "/10b_plots_mutations/", "2218_allMutations_filt.png"), 
+ width = 7*300,        # 5 x 300 pixels
+ height = 5*300,
+ res = 300,            # 300 pixels per inch
+ pointsize = 8)        # smaller font size
+
+ggplot2::ggplot(SNPs_all_ExpCond_rearr, aes(fill=variable, y=percentage, x=mutations)) + 
+    geom_bar(position="dodge", stat="identity") +
+    theme_light() +
+  theme(axis.text.x = element_text(angle = 45, hjust=1)) +
+  ggtitle("All mutations (filtered)") +
+  xlab("Type of mutation") + ylab("Mutation frequency") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black")) +
+   theme(plot.title = element_text(hjust = 0.5)) +
+scale_fill_manual(values = samples_color_colors)
+
+dev.off()
+```
+
+```{r, mutate_plot_eq3}
+#reshape the dataframe to get the format for plotting
+SNPs_eq3_ExpCond <- reshape2::melt(data=counts_eq3_ExpCond_vals, id.vars='mutations',
+                variable.names='sample_name', value.name = 'percentage')
+
+# rearrange by 1st column
+SNPs_eq3_ExpCond_rearr <- SNPs_eq3_ExpCond[order(SNPs_eq3_ExpCond$mutations),]
+
+SNPs_eq3_ExpCond_rearr$mutations <- factor(SNPs_eq3_ExpCond_rearr$mutations, levels = c('C>A', 'C>G', 'C>T', 'T>A', 'T>G', 'T>C'))
+SNPs_eq3_ExpCond_rearr[order(SNPs_eq3_ExpCond_rearr$mutations),]
+
+#########
+
+
+png(paste0(path_dir, "/10b_plots_mutations/", "2218_eq3Mutations_filt.png"), 
+ width = 7*300,        # 5 x 300 pixels
+ height = 5*300,
+ res = 300,            # 300 pixels per inch
+ pointsize = 8)        # smaller font size
+
+
+#sample_palette <- c("dark grey", "red", "#ffc425", "royalblue","#00b159", "brown1", "yellow", "#00aedb", "darkseagreen")
+samples_color_colors <-setNames(sample_palette, levels(SNPs_eq3_ExpCond_rearr$variable))
+
+ggplot2::ggplot(SNPs_eq3_ExpCond_rearr, aes(fill=variable, y=percentage, x=mutations)) + 
+    geom_bar(position="dodge", stat="identity") +
+    theme_light() +
+  theme(axis.text.x = element_text(angle = 45, hjust=1)) +
+  ggtitle("Only mutations common to all 3 replicates (filtered)") +
+  xlab("Type of mutation") + ylab("Mutation frequency") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black")) +
+   theme(plot.title = element_text(hjust = 0.5)) +
+scale_fill_manual(values = samples_color_colors)
+dev.off()
+```
