@@ -155,32 +155,37 @@ dds_batch_transcript <- DESeq2::DESeqDataSetFromMatrix(countData = dfcounts_tran
 
 Only the code for gene-PCA is shown.
 ```{r, plot_PCA_batch_gene, echo=FALSE}
-#png("./manual_PCA.png", width=1600, height=800, units = "px", bg = "white")
 
-rld_PCA_gene <- plotPCA(rlog(dds_batch_gene, blind = TRUE), intgroup=c("batch", "condition"), returnData=TRUE)
-percentVar <- round(100 * attr(rld_PCA_gene, "percentVar"), 1)   # rounded values for each axis of PC variance
-ggplot(rld_PCA_gene, aes(PC1, PC2, color=condition, shape=batch)) +
-  geom_point(size=3) +
-  scale_shape_manual(values=c(3, 1, 2))+    # change shapes of symbols
-  scale_size_manual(values=c(8, 8, 8))+     # change sizes of symbols
-  xlab(paste0("PC1: ",percentVar[1])) +
-  ylab(paste0("PC2: ",percentVar[2]))
+# png("./manual_PCA2.png", 
+#   width = 8*300,        # 5 x 300 pixels
+#   height = 5*300,
+#   res = 300,            # 300 pixels per inch
+#   pointsize = 8)        # smaller font size
 
-rld_PCA_gene_tot <- plotPCA(rlog(dds_batch_gene[, grepl("totRNA", dds_batch_gene$condition)], blind = TRUE), intgroup=c("batch", "condition"), returnData=TRUE)
-percentVar <- round(100 * attr(rld_PCA_gene_tot, "percentVar"), 1)   # rounded values for each axis of PC variance
-ggplot(rld_PCA_gene_tot, aes(PC1, PC2, color=condition, shape=batch)) +
-  geom_point(size=3) +
-  scale_shape_manual(values=c(3, 1, 2))+    # change shapes of symbols
-  scale_size_manual(values=c(8, 8, 8))+     # change sizes of symbols
-  xlab(paste0("PC1: ",percentVar[1])) +
-  ylab(paste0("PC2: ",percentVar[2]))
+# rld_PCA_gene <- plotPCA(rlog(dds_batch_gene, blind = TRUE), intgroup=c("batch", "condition"), returnData=TRUE)
+# percentVar <- round(100 * attr(rld_PCA_gene, "percentVar"), 1)   # rounded values for each axis of PC variance
+# ggplot(rld_PCA_gene, aes(PC1, PC2, color=condition, shape=batch)) +
+#   geom_point(size=3) +
+#   scale_shape_manual(values=c(3, 1, 2))+    # change shapes of symbols
+#   scale_size_manual(values=c(8, 8, 8))+     # change sizes of symbols
+#   xlab(paste0("PC1: ",percentVar[1])) +
+#   ylab(paste0("PC2: ",percentVar[2]))
+# 
+# rld_PCA_gene_tot <- plotPCA(rlog(dds_batch_gene[, grepl("totRNA", dds_batch_gene$condition)], blind = TRUE), intgroup=c("batch", "condition"), returnData=TRUE)
+# percentVar <- round(100 * attr(rld_PCA_gene_tot, "percentVar"), 1)   # rounded values for each axis of PC variance
+# ggplot(rld_PCA_gene_tot, aes(PC1, PC2, color=condition, shape=batch)) +
+#   geom_point(size=3) +
+#   scale_shape_manual(values=c(3, 1, 2))+    # change shapes of symbols
+#   scale_size_manual(values=c(8, 8, 8))+     # change sizes of symbols
+#   xlab(paste0("PC1: ",percentVar[1])) +
+#   ylab(paste0("PC2: ",percentVar[2]))
 
 rld_PCA_gene_sg <- plotPCA(rlog(dds_batch_gene[, grepl("sgRNA", dds_batch_gene$condition)], blind = TRUE), intgroup=c("batch", "condition"), returnData=TRUE)
 percentVar <- round(100 * attr(rld_PCA_gene_sg, "percentVar"), 1)   # rounded values for each axis of PC variance
-ggplot(rld_PCA_gene_sg, aes(PC1, PC2, color=condition, shape=batch)) +
+ggplot(rld_PCA_gene_sg, aes(PC1, PC2, color=condition)) +
   geom_point(size=3) +
-  scale_shape_manual(values=c(3, 1, 2))+    # change shapes of symbols
-  scale_size_manual(values=c(8, 8, 8))+     # change sizes of symbols
+  theme_classic(base_size = 12) +
+  scale_size_manual(values=c(10, 10, 10))+     # change sizes of symbols
   xlab(paste0("PC1: ",percentVar[1])) +
   ylab(paste0("PC2: ",percentVar[2]))
 #dev.off()
@@ -633,7 +638,7 @@ f.MAplot_geneList <- function( object, ylim = NULL,
 ### Done by hand - go back to the beginning and make this standardized, easier
 
 # import the data with top 2000 genes from the eisa analysis
-path_orig <- "/data/manke/processing/balan/Yilong_SG_data/2022.03_DE_genes_transcript/intron_analysis_bam"
+path_orig <- "/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/4_intron_analysis_bam"
 
 
 #DON'T CHANGE THE ORDER OF THE OBJECTS!!!
@@ -743,7 +748,7 @@ for (i in 1:length(list_toExtract) ) {
 
 
 ```{r, intron_DE}
-path_inDir <- "/data/manke/processing/balan/Yilong_SG_data/2022.03_DE_genes_transcript"
+path_inDir <- "/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/"
 
 counts_intron_noNeg <- read.delim(paste0(path_inDir, '/intron_analysis_bam/', 'counts_introns_from_featureCounts_noNeg.tsv'), header = TRUE, sep='\t', na.strings="NA", row.names = 1, stringsAsFactors = F)
 

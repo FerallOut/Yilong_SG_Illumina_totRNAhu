@@ -36,7 +36,7 @@ U3      treat_UVA       Group4
 ```{r, load-count-data}
 
 #dfolder <- "/data/processing2/balan_Yilong/project_2297_45nG7vuc_mRNA-seq"
-dfolder <- "/data/manke/processing/balan/Yilong_SG_data/2022.03_DE_genes_transcript/"
+dfolder <- "/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/"
 fcounts_gene <- "counts.tsv"
 
 counts_exon <- read.delim(paste0(dfolder, fcounts_gene), header = TRUE, sep='\t', na.strings="NA" , row.names=1,  stringsAsFactors = F)
@@ -67,7 +67,7 @@ head(few_counts_exon)
 ```{r, heatmap-new-plot}
 
 # import genes from Yilong
-genes_Yilong <- read.delim('/data/manke/processing/balan/Yilong_SG_data/2022.03_DE_genes_transcript/analysis_bam_default/new_plots/genes.tab', header = F, sep='\t', na.strings="NA")
+genes_Yilong <- read.delim('/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/1a_analysis_bam_default/new_plots/genes.tab', header = F, sep='\t', na.strings="NA")
 
 # subset the file by finding the index of the rows starting with '#'
 #genes_Yilong[grep("^#", genes_Yilong$V1), ]
@@ -96,41 +96,41 @@ library(biomaRt)
 #listEnsembl()
 # using Ensembl90
 listEnsemblArchives()
-listEnsembl(version = 90)
+listEnsembl(version = 91)
 
-ensembl90 <- useEnsembl(biomart = 'genes', 
+ensembl91 <- useEnsembl(biomart = 'genes', 
                        dataset = 'hsapiens_gene_ensembl',
-                       version = 90)
+                       version = 91)
 
 # retrieve the attributes for the query:
-attr <- listAttributes(ensembl90)
+attr <- listAttributes(ensembl91)
 # what I need is symbol -> ensemblID
 #'hgnc_symbol', 'QQQexternal_gene_name', 'PPPensembl_gene_id', 'hgnc_id'
 		
 # retrieve the filters for the query:
-filters <- listFilters(ensembl90)
+filters <- listFilters(ensembl91)
 # what filters I want: gene stable id -> 'ensembl_gene_id'
 
 # build a query and run it:
 df.G1_S <- getBM(attributes = c('external_gene_name', 'ensembl_gene_id'),
 		filters = "external_gene_name",
 		values = G1_S$V2[-1],
-		mart = ensembl90)
+		mart = ensembl91)
 
 df.G2_M <- getBM(attributes = c('external_gene_name', 'ensembl_gene_id'),
 		filters = "external_gene_name",
 		values = G2_M$V2[-1],
-		mart = ensembl90)
+		mart = ensembl91)
 
 df.inflammatory <- getBM(attributes = c('external_gene_name', 'ensembl_gene_id'),
 		filters = "external_gene_name",
 		values = Inflammatory$V1[-1],
-		mart = ensembl90)
+		mart = ensembl91)
 
 df.dsRNA_response <- getBM(attributes = c('external_gene_name', 'ensembl_gene_id'),
 		filters = "external_gene_name",
 		values = dsRNA_response$V1[-1],
-		mart = ensembl90)
+		mart = ensembl91)
 
 
 # subset genes for each df
@@ -212,7 +212,7 @@ my_gene_col <- counts.all_samples$cluster
 
 
 x <- counts.all_samples[1:50,]
-df["A"]
+
 x.my_gene_col <- x["cluster"]
 
 pheatmap(x[,-c(1, ncol(x)-1, ncol(x))], annotation_row = x.my_gene_col,

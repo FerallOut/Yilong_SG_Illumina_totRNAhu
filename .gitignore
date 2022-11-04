@@ -23,6 +23,9 @@
 # produced vignettes
 vignettes/*.html
 
+/data/manke/group/balan/projects/Yilong_SG_Illumina_totRNAhu/code/
+/data/manke/group/balan/projects/Yilong_SG_Illumina_totRNAhu/code_R/
+/data/manke/group/balan/projects/Yilong_SG_Illumina_totRNAhu/code_B/
 
 .gitignore
 .*

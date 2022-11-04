@@ -103,7 +103,12 @@ Rdf <- f.load_multiple_R_objects(work_dir, directories, list_objects)
 
 
 ```{r, tests}
-png("./MA_plot.png", width=850, height=475, units = "px", bg = "white")
+png("./MA_plot2.png",
+  width = 8*300,        # 5 x 300 pixels
+  height = 5*300,
+  res = 300,            # 300 pixels per inch
+  pointsize = 8)        # smaller font size
+
 par(oma = c(3,4,4,1),    # margins for whole plot
     mar = c(3,4,3.2,1)  # margins for individual plots
     ) 
