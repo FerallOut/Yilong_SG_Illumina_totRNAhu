@@ -42,7 +42,7 @@ This workflow uses the *DESeq2* R packages. We can start from the counts summari
 ### Load the data
 ```{r, load_data}
 # dfolder <- "/data/akhtar/group2/snakequest_result/FANCI_RNA_seq_4stresses/"
-dfolder <- "/data/manke/processing/balan/Yilong_SG_data/2022.03_DE_genes_transcript/"
+dfolder <- "/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/"
 fcounts_gene <- "counts.tsv"
 
 dfcounts_gene <- read.delim(paste0(dfolder, fcounts_gene), header = TRUE, sep='\t', na.strings="NA" , row.names=1)
@@ -169,7 +169,7 @@ dds<- DESeq2::DESeq(dds)
 
 ```{r, heatmap2}
 # import genes from Yilong
-genes_Yilong <- read.delim('/data/manke/processing/balan/Yilong_SG_data/2022.03_DE_genes_transcript/analysis_bam_default/new_plots/genes.tab', header = F, sep='\t', na.strings="NA")
+genes_Yilong <- read.delim('/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.03_DE_genes_transcript/1a_analysis_bam_default/new_plots/genes.tab', header = F, sep='\t', na.strings="NA")
 
 # subset the file by finding the index of the rows starting with '#'
 #genes_Yilong[grep("^#", genes_Yilong$V1), ]

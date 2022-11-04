@@ -1,0 +1,144 @@
+---
+title: "2218_Yilong_mRNA_stressGranules_DESeq2"
+output: html_notebook
+toc: true
+---
+
+## Sample sheet
+
+sample name     note    Barcode note-1
+1       total RNA of mock-1     22L005998       collected at 20200215
+2       total RNA of mock-2     22L005999       collected at 20200215
+3       total RNA of mock-3     22L006000       collected at 20200218
+4       total RNA of arsenite-1 22L006001       collected at 20200215
+5       total RNA of arsenite-2 22L006002       collected at 20200218
+6       total RNA of arsenite-3 22L006003       collected at 20200218
+7       total RNA of HS-1       22L006004       collected at 20200218
+8       total RNA of HS-2       22L006005       collected at 20200218
+9       total RNA of HS-3       22L006006       collected at 20200218
+10      total RNA of NaCl-1     22L006007       collected at 20200215
+11      total RNA of NaCl-2     22L006008       collected at 20200218
+12      total RNA of NaCl-3     22L006009       collected at 20200218
+13      total RNA of 4sUV-1     22L006010       collected at 20200215
+14      total RNA of 4sUV-2     22L006011       collected at 20200215
+15      total RNA of 4sUV-3     22L006012       collected at 20200218
+16      SG RNA of arsenite-1    22L006013       collected at 20200215
+17      SG RNA of arsenite-2    22L006014       collected at 20200218
+18      SG RNA of arsenite-3    22L006015       collected at 20200218
+19      SG RNA of HS-1  22L006016       collected at 20200218
+20      SG RNA of HS-2  22L006017       collected at 20200218
+21      SG RNA of HS-3  22L006018       collected at 20200218
+22      SG RNA of  NaCl-1       22L006019       collected at 20200215
+23      SG RNA of  NaCl-2       22L006020       collected at 20200218
+24      SG RNA of  NaCl-3       22L006021       collected at 20200218
+25      SG RNA of UV-1  22L006022       collected at 20200215
+26      SG RNA of UV-2  22L006023       collected at 20200215
+27      SG RNA of UV-3  22L006024       collected at 20200218
+
+
+
+```{r, install-libraries}
+#if (!requireNamespace("BiocManager", quietly = TRUE))
+#	install.packages("BiocManager")
+
+#BiocManager::install(c("Rhisat2, "QuasR""))
+# BiocManager::install("eisaR")
+# BiocManager::install("GenomicFeatures")
+# BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")  
+```
+
+```{r, load-libraries}
+suppressPackageStartupMessages(library(eisaR))
+suppressPackageStartupMessages(library(GenomicFeatures))
+suppressPackageStartupMessages(library(TxDb.Hsapiens.UCSC.hg38.knownGene))
+suppressPackageStartupMessages(library(QuasR))
+suppressPackageStartupMessages(library(Rhisat2))
+suppressPackageStartupMessages(library(parallel))
+```
+### 1. Prepare gene annotation
+
+### Load the data
+```{r, annotations, message=FALSE, warning=FALSE, include=FALSE}
+# view available annotations to know what to install in step 1
+#pkgs <- c(BiocManager::available("TxDb"), BiocManager::available("EnsDb"))
+#pkgs
+
+# load the object:
+txHu <- TxDb.Hsapiens.UCSC.hg38.knownGene
+```
+
+```{r, explore-TxDb-obj}
+keytypes(txHu)
+columns(txHu)
+
+# extract filtered exonic and gene body regions
+regS <- eisaR::getRegionsFromTxDb(txdb = txHu, strandedData = TRUE)
+regU <- eisaR::getRegionsFromTxDb(txdb = txHu, strandedData = FALSE)
+
+lengths(regS)
+lengths(regU)
+```
+
+### 2. Quantify RNA-seq alignments into exons and introns
+
+#### 2.1. Align reads
+Align the reads to genome (hg19sub.fa) using qAlign. 
+
+```{r, align-reads}
+# create the sample sheet for paired-end sequencing:
+path_inDir <- "/data/manke/processing/balan/Yilong_SG_data/2022.03_DE_genes_transcript"
+orig_ss <- read.delim(paste0(path_inDir, "/", "sampleSheets/all_batch_corrected_sampleSheet.tsv"), header = TRUE, sep='\t', na.strings="NA")
+  
+fastq_location <- paste0(path_inDir, "/", "fastq")
+
+FileName1 <- list.files(path = fastq_location, pattern = '_R1.fastq.gz', all.files = FALSE,
+           full.names = TRUE, recursive = FALSE, 
+           ignore.case = FALSE, include.dirs = FALSE, no.. = TRUE)
+
+FileName2 <- list.files(path = fastq_location, pattern = '_R2.fastq.gz', all.files = FALSE,
+           full.names = TRUE, recursive = FALSE, 
+           ignore.case = FALSE, include.dirs = FALSE, no.. = TRUE)
+
+SampleName <- substring(basename(FileName1),1, nchar(basename(FileName1))-12)
+#sample_names <- all_sample_names[seq(1, length(all_sample_names), 2)]
+
+sampleSheet <- data.frame(FileName1, FileName2, SampleName) 
+##############################################
+############################################
+
+# use e.g. 8 cores for alignment by creating a cluster object (from package parallel) and provide it to the qAlign function
+#BiocManager::install("tictoc")
+library(tictoc)
+tic("makeCluster")
+clus <- makeCluster(8)
+toc()  # 42 sec
+
+tic("align reads")
+
+#For all samples
+#align_Rhisat_split <- qAlign(sampleFile = sampleSheet, 
+#               genome = read.delim("/data/repository/organisms/GRCh38_ensembl/genome_fasta/genome.fa"),
+#               aligner = "Rhisat2", splicedAlignment = TRUE,
+#               alignmentsDir = paste0(path_inDir, '/intron_analysis_qA_last'),
+#               geneAnnotation = txHu,
+#               clObj=clus)
+
+#For 1 sample
+sampleSheet <- data.frame(FileName1, FileName2, SampleName)
+align_Rhisat_split <- qAlign(sampleFile = sampleSheet2,
+               genome = read.delim("/data/repository/organisms/GRCh38_ensembl/genome_fasta/genome.fa"),
+               aligner = "Rhisat2", splicedAlignment = TRUE,
+               alignmentsDir = paste0(path_inDir, '/intron_analysis_qA_last'),
+               geneAnnotation = txHu,
+               clObj=clus)
+
+stopCluster(clus)
+rm(clus)
+toc()
+
+
+save(align_Rhisat_split, paste0(path_inDir, '/intron_analysis_qA_last/align_Rhisat_split'))
+
+#write.table(align_Rhisat_split, paste0(path_inDir, '/intron_analysis_qA_last/align_Rhisat_split'), sep="\t", row.names=FALSE)
+```
+
