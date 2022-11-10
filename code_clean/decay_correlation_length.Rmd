@@ -1,0 +1,312 @@
+---
+title: "decay_correlation_length.pdf"
+author: "Yuling_Zhao"
+date: "24/10/2022"
+output: pdf_document
+---
+
+```{r warning=FALSE, message=FALSE}
+counts_gene <- read.table("/data/akhtar/group2/zhao/zhou/mRNAseq/featureCounts_new/featurecounts_gene.txt",header = T, row.names = 1)
+counts_exon <- read.table("/data/akhtar/group2/zhao/zhou/mRNAseq/featureCounts/counts.tsv",header = T, row.names = 1)
+
+cts_exon <- as.data.frame(counts_exon)
+cts_exon$ensembl_gene_id <- rownames(cts_exon)
+
+cts_gene <- as.data.frame(counts_gene)[, 6:17]
+colnames(cts_gene) <- colnames(cts_exon[, 1:12])
+cts_gene$ensembl_gene_id <- rownames(cts_gene)
+
+tmp <- merge(cts_gene, cts_exon, by = "ensembl_gene_id")
+
+library(dplyr)
+cts_intron <- data.frame(tmp[, 2:13] - tmp[, 14:25])
+colnames(cts_intron) <- colnames(cts_gene)[1:12]
+rownames(cts_intron) <- tmp$ensembl_gene_id
+
+cts_intron <- as.matrix(cts_intron)
+select <- Biobase::rowMin(cts_intron)>= 0
+cts_intron <- cts_intron[select, ]
+cts_intron <- as.data.frame(cts_intron)
+
+cts_exon <- tmp[, c(1, 14:25)]
+colnames(cts_exon) <- c("ensembl_gene_id", colnames(cts_gene)[1:12])
+
+cts_exon <- cts_exon[cts_exon$ensembl_gene_id %in% rownames(cts_intron), ]
+rownames(cts_exon) <- cts_exon$ensembl_gene_id
+cts_exon <- cts_exon[, 2:13]
+
+#tidy mapping data with spike-in
+condition <- factor(rep(c(rep("untreated", 3), rep("4sU_UVA", 3)),2))
+treatment <- factor(c(rep("mock", 6), rep("Flavopiridol", 6)))
+coldata <- data.frame(condition, treatment)
+rownames(coldata) <- colnames(cts_exon)
+
+hybrid <- read.table("/data/akhtar/group2/zhao/zhou/mRNAseq/featureCounts_new/featurecounts.txt", header = TRUE)
+
+hybrid_sort <- hybrid[, 7:18]
+rownames(hybrid_sort) <- hybrid$Geneid
+colnames(hybrid_sort) <- rownames(coldata)
+
+#caculate size factor from spike-in
+library(DESeq2)
+dds_hybrid <- DESeqDataSetFromMatrix(countData = hybrid_sort,
+                                     colData = coldata,
+                                     design = ~ treatment + condition)
+
+cts_gene <- cts_gene[, 1:12]
+
+dds_gene <- DESeqDataSetFromMatrix(countData = cts_gene,
+                                   colData = coldata,
+                                   design = ~ treatment + condition)
+
+hybrid_gene_id <- hybrid_sort %>% 
+  mutate(gene_id = rownames(hybrid_sort))
+
+rownames(dds_hybrid) <- hybrid_gene_id$gene_id
+
+keep_hybrid <- rowSums(counts(dds_hybrid)) >= 10
+keep_gene <- rowSums(counts(dds_gene)) >= 10
+dds_hybrid <- dds_hybrid[keep_hybrid]
+dds_gene <- dds_gene[keep_gene]
+
+#sizefactor
+gene_id.scaling = hybrid_gene_id$gene_id[grepl('ERCC',hybrid_gene_id$gene_id)]
+
+dds_spike = estimateSizeFactors(dds_hybrid, controlGenes = rownames(dds_hybrid) %in% gene_id.scaling)
+sizeFactors(dds_spike)
+#use spike in size factor for intron counts and do differentiak analysis
+sizeFactors(dds_gene) = sizeFactors(dds_spike)
+dds_gene <- DESeq(dds_gene)
+
+#select exon and introns from filtered gene
+cts_norm <- as.data.frame(counts(dds_gene, normalized = TRUE))
+
+cts_exon <- filter(cts_exon, rownames(cts_exon) %in% rownames(cts_norm))
+
+cts_intron <- filter(cts_intron, rownames(cts_intron) %in% rownames(cts_norm))
+
+untreated <- c(1:3, 7:9)
+treated <- c(4:6, 10:12)
+
+#normalize exon and intron counts
+colData_treated <- data.frame(treatment = c(rep("mock", 3), rep("Flavopiridol", 3)))
+colData_treated$treatment <- factor(colData_treated$treatment, levels = c("mock","Flavopiridol"))
+rownames(colData_treated) <- colnames(cts_intron[, treated])
+
+
+colData_untreated <- data.frame(treatment = c(rep("mock", 3), rep("Flavopiridol", 3)))
+colData_untreated$treatment <- factor(colData_untreated$treatment, levels = c("mock","Flavopiridol"))
+rownames(colData_untreated) <- colnames(cts_intron[, untreated])
+
+cts_exon_untreated <- cts_exon[, untreated]
+rownames(cts_exon_untreated) <- sub("\\..*", "", rownames(cts_exon_untreated))
+cts_exon_treated <- cts_exon[, treated]
+rownames(cts_exon_treated) <- sub("\\..*", "", rownames(cts_exon_treated))
+
+cts_intron_untreated <- cts_intron[, untreated]
+rownames(cts_intron_untreated) <- sub("\\..*", "", rownames(cts_intron_untreated))
+
+cts_intron_treated <- cts_intron[, treated]
+rownames(cts_intron_treated) <- sub("\\..*", "", rownames(cts_intron_treated))
+
+
+dds_exon_untreated <- DESeqDataSetFromMatrix(countData = cts_exon_untreated,
+                                   colData = colData_untreated,
+                                   design = ~treatment)
+
+dds_exon_treated <- DESeqDataSetFromMatrix(countData = cts_exon_treated,
+                                             colData = colData_treated,
+                                             design = ~treatment)
+
+dds_intron_untreated <- DESeqDataSetFromMatrix(countData = cts_intron_untreated,
+                                             colData = colData_untreated,
+                                             design = ~treatment)
+
+dds_intron_treated <- DESeqDataSetFromMatrix(countData = cts_intron_treated,
+                                           colData = colData_treated,
+                                           design = ~treatment)
+
+keep_exon_untreated <- rowSums(counts(dds_exon_untreated)) >= 10
+keep_exon_treated <- rowSums(counts(dds_exon_treated)) >= 10
+keep_intron_untreated <- rowSums(counts(dds_intron_untreated)) >= 10
+keep_intron_treated <- rowSums(counts(dds_intron_treated)) >= 10
+
+dds_exon_untreated <- dds_exon_untreated[keep_exon_untreated]
+dds_exon_treated <- dds_exon_treated[keep_exon_treated]
+dds_intron_untreated <- dds_intron_untreated[keep_intron_untreated]
+dds_intron_treated <- dds_intron_treated[keep_intron_treated]
+
+
+sizeFactors(dds_exon_untreated) = sizeFactors(dds_spike)[untreated]
+sizeFactors(dds_exon_treated) = sizeFactors(dds_spike)[treated]
+sizeFactors(dds_intron_untreated) = sizeFactors(dds_spike)[untreated]
+sizeFactors(dds_intron_treated) = sizeFactors(dds_spike)[treated]
+
+dds_exon_untreated <- DESeq(dds_exon_untreated)
+dds_exon_treated <- DESeq(dds_exon_treated)
+dds_intron_untreated <- DESeq(dds_intron_untreated)
+dds_intron_treated <- DESeq(dds_intron_treated)
+
+res_exon_untreated <- results(dds_exon_untreated)
+res_exon_treated <- results(dds_exon_treated)
+res_intron_untreated <- results(dds_intron_untreated)
+res_intron_treated <- results(dds_intron_treated)
+
+#MA plot
+#res_exon_untreated_data
+res_exon_untreated_data <- as.data.frame(res_exon_untreated)
+
+#res_exon_treated_data
+res_exon_treated_data <- as.data.frame(res_exon_treated)
+
+#res_intron_untreated_data
+res_intron_untreated_data <- as.data.frame(res_intron_untreated)
+
+#res_intron_treated_data
+res_intron_treated_data <- as.data.frame(res_intron_treated)
+
+#merge all data LFC
+gene_common_exon <- intersect(rownames(res_exon_untreated_data), rownames(res_exon_treated_data))
+gene_common_intron <- intersect(rownames(res_intron_untreated_data), rownames(res_intron_treated_data))
+gene_common_exon_intron <- intersect(gene_common_exon, gene_common_intron)
+
+res_exon_untreated_data$ensembl_gene_id <- rownames(res_exon_untreated_data)
+res_exon_treated_data$ensembl_gene_id <- rownames(res_exon_treated_data)
+res_intron_untreated_data$ensembl_gene_id <- rownames(res_intron_untreated_data)
+res_intron_treated_data$ensembl_gene_id <- rownames(res_intron_treated_data)
+
+res_exon_untreated_data <- res_exon_untreated_data[rownames(res_exon_untreated_data) %in% gene_common_exon_intron, ]
+res_exon_treated_data <- res_exon_treated_data[rownames(res_exon_treated_data) %in% gene_common_exon_intron, ]
+res_intron_untreated_data <- res_intron_untreated_data[rownames(res_intron_untreated_data) %in% gene_common_exon_intron, ]
+res_intron_treated_data <- res_intron_treated_data[rownames(res_intron_treated_data) %in% gene_common_exon_intron, ]
+
+exon_untreated_treated <- merge(res_exon_untreated_data, res_exon_treated_data, by = "ensembl_gene_id")
+exon_untreated_treated <- exon_untreated_treated[, c(1, 3, 9)]
+
+intron_untreated_treated <- merge(res_intron_untreated_data, res_intron_treated_data, by = "ensembl_gene_id")
+intron_untreated_treated <- intron_untreated_treated[, c(1, 3, 9)]
+
+library(xlsx)
+SG <- read.xlsx("/data/akhtar/group2/zhao/zhou/gene_list/gene_list.xlsx", sheetIndex = 1, header = FALSE)
+exon_SG <- exon_untreated_treated[exon_untreated_treated$ensembl_gene_id %in% SG$X1, ]
+intron_SG <- intron_untreated_treated[intron_untreated_treated$ensembl_gene_id %in% SG$X1, ]
+
+#heatmap of LFC
+data <- data.frame(
+  intron_untreated = intron_SG$log2FoldChange.x,
+  intron_4sU_UVA = intron_SG$log2FoldChange.y,
+  exon_untreated = exon_SG$log2FoldChange.x,
+  exon_4sU_UVA = exon_SG$log2FoldChange.y
+)
+
+sum(exon_SG$ensembl_gene_id == intron_SG$ensembl_gene_id)
+
+rownames(data) <- exon_SG$ensembl_gene_id
+
+data_id <- data %>% 
+  mutate(ensembl_gene_id = exon_SG$ensembl_gene_id)
+
+library(pheatmap)
+colors <- seq(-12,12,by = 0.01)
+
+library(RColorBrewer)
+library(circlize)
+pheatmap(data, # Plots the first 10 genes of the dataset
+         color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdYlBu")))(length(colors)), # Defines the vector of colors for the legend (it has to be of the same lenght of breaksList)
+         breaks = colors,
+         cluster_cols = FALSE, cluster_rows = TRUE, show_rownames = FALSE,
+         scale = "none")
+
+#MA plot
+library(biomaRt)
+ensemb_106 <- useEnsembl(biomart = 'genes',
+                        dataset = 'hsapiens_gene_ensembl',
+                        version = 106)
+searchDatasets(mart = ensemb_106, pattern = "hsapiens")
+
+gene_location <- getBM(attributes = c('ensembl_gene_id', 'start_position', 'end_position'),
+                     filters = 'ensembl_gene_id',
+                     values = gene_common_exon_intron,
+                     mart = ensemb_106)
+
+gene_length <- gene_location %>% 
+  mutate(gene_length = gene_location$end_position - gene_location$start_position)
+
+intron_untreated_treated_length <- merge(intron_untreated_treated, gene_length, by = "ensembl_gene_id")
+intron_untreated_treated_length$decay <- intron_untreated_treated_length$log2FoldChange.y - intron_untreated_treated_length$log2FoldChange.x
+
+intron_SG_highlight <- intron_untreated_treated_length %>% 
+  filter(ensembl_gene_id %in% SG$X1)
+
+library(ggplot2)
+
+intron_untreated_MA <- intron_untreated_treated_length %>% 
+  ggplot(aes(x=log(gene_length), y=log2FoldChange.x)) + 
+  geom_point(alpha=0.3) +
+  geom_point(data=intron_SG_highlight, 
+             aes(x=log(gene_length),y=log2FoldChange.x), 
+             color='red',
+             size=1)+ geom_smooth(method = lm) +
+  ylim(-15, 5) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+intron_untreated_MA
+
+intron_untreated_lm <- lm(log2FoldChange.x~log(gene_length), intron_untreated_treated_length)
+summary(intron_untreated_lm)
+
+
+intron_treated_MA<- intron_untreated_treated_length %>% 
+  ggplot(aes(x=log(gene_length), y=log2FoldChange.y)) + 
+  geom_point(alpha=0.3) +
+  geom_point(data=intron_SG_highlight, 
+             aes(x=log(gene_length),y=log2FoldChange.y), 
+             color='red',
+             size=1)+ geom_smooth(method = lm) +
+  ylim(-15, 5) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+
+intron_treated_MA
+
+intron_treated_lm <- lm(log2FoldChange.y~log(gene_length), intron_untreated_treated_length)
+summary(intron_treated_lm)
+
+intron_decay_MA<- intron_untreated_treated_length %>% 
+  ggplot(aes(x=log(gene_length), y=decay)) + 
+  geom_point(alpha=0.3) +
+  geom_point(data=intron_SG_highlight, 
+             aes(x=log(gene_length),y=decay), 
+             color='red',
+             size=1)+ geom_smooth(method = lm) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+
+intron_decay_MA
+
+intron_decay_lm <- lm(decay~log(gene_length), intron_untreated_treated_length)
+summary(intron_decay_lm)
+
+
+intron_SG_highlight_data <- data.frame(
+  LFC = c(intron_SG_highlight$log2FoldChange.x, intron_SG_highlight$log2FoldChange.y),
+  gene_length = rep(c(intron_SG_highlight$gene_length), 2),
+  label = c(rep("untreated", nrow(intron_SG_highlight)), rep("4sU_UVA", nrow(intron_SG_highlight)))
+)
+
+intron_SG_highlight_data %>% 
+  ggplot(aes(x=log(gene_length), y=LFC, colour = label)) + 
+  geom_point(alpha=0.3) +geom_smooth(method = lm, se = FALSE) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+
+SG_untreated_lm <- lm(log2FoldChange.x~log(gene_length), intron_SG_highlight)
+summary(SG_untreated_lm)
+
+SG_treated_lm <- lm(log2FoldChange.y~log(gene_length), intron_SG_highlight)
+summary(SG_treated_lm)
+
+
+
+```
+
