@@ -1,10 +1,6 @@
 #!/bin/bash -l
 
 ## script to run kraken on fastq files to check for any sources of contamination 
-## the fastq files are saved in pairs in different folders, e.g.:
-## folderA/sampleN_R1.fastq.gz	folderA/sampleN_R2.fastq.gz
-## folderB/sampleM_R1.fastq.gz	folderB/sampleM_R2.fastq.gz 	etc
-
 
 ## load modules
 module load MultiQC

@@ -25,3 +25,5 @@ paths:
     3_qc_RSeQC: /output/3_qc_kraken_RSeQC/3_RSeQC
     3_qc_RSeQC_multiQC: /output/3_qc_kraken_RSeQC/4_RSeQC_multiQC
 
+    # sources for HaplotypeCaller
+    5_SNP_bamSplit: /output/5_SNP_TtoCmut/1_bam_split

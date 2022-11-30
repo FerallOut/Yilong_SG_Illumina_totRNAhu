@@ -1,16 +1,20 @@
-name: Yilong
+name: SGproj
 channels:
   - conda-forge
   - bioconda
   - defaults
 dependencies:
-  - r-irkernel
-  - r-base
-  - r-essentials
-  - yq
-  - kraken2
-  - picard
-  - samtools
   - gatk4
-  - multiqc
   - snakepipes
+  - samtools
+  - r-base
+  - kraken2
+  - r-essentials
+  - picard
+  - multiqc
+  - yq
+  - ucsc_tools
+  - r-irkernel
+  - pysam
+  - rseqc
+  - python
