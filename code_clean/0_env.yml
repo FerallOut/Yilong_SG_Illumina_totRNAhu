@@ -9,3 +9,8 @@ dependencies:
   - r-essentials
   - yq
   - kraken2
+  - picard
+  - samtools
+  - gatk4
+  - multiqc
+  - snakepipes

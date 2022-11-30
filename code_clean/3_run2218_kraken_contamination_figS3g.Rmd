@@ -3,7 +3,7 @@
 
 - the data is in '/output/3_qc_kraken_RSeQC/s*.rep'
 
-- plot only the numbers referring to human RNA: genomic, mitochondrial and ribosomal (.png in /output/3_qc_kraken_RSeQC/)
+- plot only the numbers referring to human RNA: genomic, mitochondrial and ribosomal (.png in /images/)
 
 ```{r, load_libraries}
 suppressPackageStartupMessages(library(gtools))
@@ -101,7 +101,7 @@ df.other$Sample <- factor(df.other$Sample, levels=paste0('s',27:1))
 df.other$Class <- factor(df.other$Class, levels=as.character(rev(unique(df.other$Class)) ) )
 df.other$ExpCond <- factor(df.other$ExpCond, levels = unique(l.expCond))
 
-path_image='../images/'
+# path_image='../images/'
 # png(paste0(path_image,"/figS3g_kraken_contamination_changePerc.png"),
 #   width = 8*300,        # 5 x 300 pixels
 #   height = 5*300,
