@@ -1,6 +1,10 @@
 paths:
     main_dir: /data/manke/group/balan/projects/Yilong_SG_Illumina_totRNAhu
     
+    # references:
+    gtf_v27: /data_int/references/GRCh38_v27_genes.gtf
+    bed_v27: /data_int/references/GRCh38_v27_genes.bed
+ 
     bam_files: /data_int/bam
     fastq_files: /data_int/fastq 
 
@@ -18,6 +22,6 @@ paths:
     3_qc_kraken: /output/3_qc_kraken_RSeQC/1_kraken
     3_qc_kraken_multiQC: /output/3qc_kraken_RSeQC/2_kraken_multiQC
     kraken_db: /data_int/kraken2_contaminome/contaminomedb
-
-
+    3_qc_RSeQC: /output/3_qc_kraken_RSeQC/3_RSeQC
+    3_qc_RSeQC_multiQC: /output/3_qc_kraken_RSeQC/4_RSeQC_multiQC
 
