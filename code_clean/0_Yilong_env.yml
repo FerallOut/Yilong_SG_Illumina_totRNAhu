@@ -1,0 +1,11 @@
+name: Yilong
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - r-irkernel
+  - r-base
+  - r-essentials
+  - yq
+  - kraken2
