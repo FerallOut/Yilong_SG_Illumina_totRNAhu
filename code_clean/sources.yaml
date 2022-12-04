@@ -4,6 +4,8 @@ paths:
     # references:
     gtf_v27: /data_int/references/GRCh38_v27_genes.gtf
     bed_v27: /data_int/references/GRCh38_v27_genes.bed
+    genome_GRCh38: /data_int/references/GRCh38_genome.fa
+    slop_p10_GRCh38: /data_int/references/GRCh38_v27_genes_slop_p10.bed
  
     bam_files: /data_int/bam
     fastq_files: /data_int/fastq 
@@ -26,4 +28,16 @@ paths:
     3_qc_RSeQC_multiQC: /output/3_qc_kraken_RSeQC/4_RSeQC_multiQC
 
     # sources for HaplotypeCaller
-    5_SNP_bamSplit: /output/5_SNP_TtoCmut/1_bam_split
+    5_bamSplit: /output/5_SNP_TtoCmut/1_bam_split
+    5_bamSplit_RG: /output/5_SNP_TtoCmut/2_bam_addRG
+    5_merged: /output/5_SNP_TtoCmut/3_bam_RG_merge
+    5_SplitNCigar: /output/5_SNP_TtoCmut/4_bam_SplitNCigar
+    5_SplitNCigar_logs: /output/5_SNP_TtoCmut/4_bam_SplitNCigar/logs
+
+    5_HC_norm: /output/5_SNP_TtoCmut/5_HaplotypeCaller_norm
+    5_HC_norm_logs: /output/5_SNP_TtoCmut/5_HaplotypeCaller_norm/logs
+    5_HC_norm_bamOut: /output/5_SNP_TtoCmut/5_HaplotypeCaller_norm/bamOut
+
+    5_HC_ERC: /output/5_SNP_TtoCmut/5_HaplotypeCaller_ERC
+    5_HC_ERC_logs: /output/5_SNP_TtoCmut/5_HaplotypeCaller_ERC/logs
+    5_HC_ERC_bamOut: /output/5_SNP_TtoCmut/5_HaplotypeCaller_ERC/bamOut
