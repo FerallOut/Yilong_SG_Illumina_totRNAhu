@@ -1,5 +1,22 @@
-name: Yilong_SNVcall
+name: SGproj
 channels:
   - conda-forge
   - bioconda
   - defaults
+dependencies:
+  - gatk4
+  - snakepipes
+  - samtools
+  - r-base
+  - kraken2
+  - r-essentials
+  - picard
+  - multiqc
+  - yq
+  - ucsc_tools
+  - r-irkernel
+  - pysam
+  - rseqc
+  - python
+  - bedtools
+  - bedops
