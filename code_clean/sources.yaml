@@ -41,3 +41,17 @@ paths:
     5_HC_ERC: /output/5_SNP_TtoCmut/5_HaplotypeCaller_ERC
     5_HC_ERC_logs: /output/5_SNP_TtoCmut/5_HaplotypeCaller_ERC/logs
     5_HC_ERC_bamOut: /output/5_SNP_TtoCmut/5_HaplotypeCaller_ERC/bamOut
+    
+    5_HCnorm_softFilt_all: /output/5_SNP_TtoCmut/6_HCnorm_SNV/1_HCnorm_softFilt_all
+    5_HCnorm_softFilt_logs: /output/5_SNP_TtoCmut/6_HCnorm_SNV/1_HCnorm_softFilt_all/logs
+    5_HCnorm_hardFilt_SNV: /output/5_SNP_TtoCmut/6_HCnorm_SNV/2_HCnorm_hardFilt_SNV
+    5_HCnorm_hardFilt_logs: /output/5_SNP_TtoCmut/6_HCnorm_SNV/2_HCnorm_hardFilt_SNV/logs
+
+    5_HC_ERC_DBs: /output/5_SNP_TtoCmut/6_HC_ERC_SNV/1_HC_ERC_DBs
+    5_HC_ERC_DBs_logs: /output/5_SNP_TtoCmut/6_HC_ERC_SNV/1_HC_ERC_DBs/logs
+    5_HC_ERC_vcfs: /output/5_SNP_TtoCmut/6_HC_ERC_SNV/2_HC_ERCvcfs
+    5_HC_ERC_vcfs_logs: /output/5_SNP_TtoCmut/6_HC_ERC_SNV/2_HC_ERCvcfs/logs
+
+
+    5_HC_ERC_hardFilt_SNV: /output/5_SNP_TtoCmut/6_HC_ERC_SNV/2_HCnorm_hardFilt_SNV
+    5_HC_ERC_hardFilt_logs: /output/5_SNP_TtoCmut/6_HC_ERC_SNV/2_HCnorm_hardFilt_SNV/logs

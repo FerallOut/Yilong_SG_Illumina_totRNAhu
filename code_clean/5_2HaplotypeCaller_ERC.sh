@@ -27,7 +27,7 @@ t0=$(date +%s)
 
 printf "Script start: $(date +"%x %r %Z")\n***********************************\n"
 
-# the script calls SNPs on the prepared bam files
+# the script calls indels and SNPs on the prepared bam files
 # and outputs vcf.gz files, re-arranged bam files and a log file
 
 # the call is done only on genes that are on the main chromosomes [1-23XY]
