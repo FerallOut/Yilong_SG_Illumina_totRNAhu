@@ -2,9 +2,6 @@
 
 ## script to run RSeQC on bam files to check various control parameters 
 
-## load modules
-module load UCSCtools RSeQC MultiQC
-
 ## directories
 { read -r main_dir; } < <(yq -y '.paths."main_dir"' sources.yaml)
 

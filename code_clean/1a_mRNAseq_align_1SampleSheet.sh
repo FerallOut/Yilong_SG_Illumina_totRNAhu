@@ -2,9 +2,6 @@
 
 ## script to run mRNAseq snakePipes starting from bam files, with one sample sheet
 
-## load modules
-module load snakePipes
-
 ## directories
 { read -r main_dir; } < <(yq -y '.paths."main_dir"' sources.yaml)
 

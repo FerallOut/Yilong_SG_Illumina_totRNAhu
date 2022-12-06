@@ -2,8 +2,6 @@
 
 ## script to run kraken on fastq files to check for any sources of contamination 
 
-## load modules
-
 ## directories
 { read -r main_dir; } < <(yq -y '.paths."main_dir"' sources.yaml)
 
