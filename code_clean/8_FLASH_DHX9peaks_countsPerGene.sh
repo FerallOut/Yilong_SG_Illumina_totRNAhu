@@ -7,25 +7,16 @@ module load bedtools2
 
 ## directories
 main_dir='/data/manke/processing/balan/Yilong_SG_data/run_2218/reproducible'
-#main_dir=$HOME'/project2218'
-
 in_peaks='/data/manke/processing/balan/Yilong_SG_data/run_2218/2022.09_Flash_2218_overlap/ln_data/03aPeakCallingSTARPeakachuRscript'
-##in_fastq=${main_dir}'/data_int/bam'
+in_fastq=${main_dir}'/data_int/bam'
 
 arr_name=(WT UV)
-
 out_dir=${main_dir}'/4_FLASH_data'
-#out_dir=${main_dir}'/output/data'
 
 ## files, references
-ref_gtf='/data/manke/processing/balan/Yilong_SG_data/run_2218/data_int/references/GRCh38_v27.gtf'
-#ref_gtf=${main_dir}'/data_int/references/GRCh38_v27.gtf'
+ref_gtf=${main_dir}'/data_int/references/GRCh38_v27.gtf'
+ref_bed12=${main_dir}'/data_int/references/GRCh38_v27.gene_only.bed'
 
-refGene_bed='/data/manke/processing/balan/Yilong_SG_data/run_2218/data_int/references/GRCh38_v27.gene_only.bed'
-#ref_bed12=${main_dir}'/data_int/references/GRCh38_v27.gene_only.bed'
-
-## make dir
-#mkdir -p ${out_dir}
 ##########################################################################
 
 
