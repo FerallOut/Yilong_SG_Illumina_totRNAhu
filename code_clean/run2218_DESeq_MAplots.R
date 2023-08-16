@@ -49,8 +49,6 @@ suppressPackageStartupMessages(library(DESeq2))
 
 
 ```{r}
-## TO DELETE?
-
 setwd('/data/manke/group/balan/projects/Yilong_SG_Illumina_totRNAhu/output/1a_mRNAseq_alignment_1SampleSheet')
 Robj <- load(paste0(in_dir,"/DEseq_basic_DESeq.Rdata") )
 ddr_shrunk
@@ -68,9 +66,6 @@ f.load_multiple_R_objects <- function(common_path, dirs, list_objs) {
   v.dt_s <- vector(mode = "list", length = length(list_objs))
   
   for (i in 1:length(list_objs) ) {
-    #print(i)
-    ## paste the directories and the name of the objects in the correct order!!!
-    ## 'common_path' should end in a '/'!!
     load(paste0(common_path, '/', dirs[i], '/', 'DEseq_basic_DESeq.Rdata'))
     assign(paste0('dds', '_', list_objs[i]), dds) 
     assign(paste0('ddr', '_', list_objs[i]), ddr) 
@@ -81,8 +76,6 @@ f.load_multiple_R_objects <- function(common_path, dirs, list_objs) {
     }
   return(v.dt_s)
 }
-
-#work_dir<- '/data/manke/group/balan/projects/Yilong_SG_Illumina_totRNAhu/output/2a_mRNAseq_DESeq_manual'
 
 # which folders to load
 path_dir <- '/data/manke/group/balan/projects/Yilong_SG_Illumina_totRNAhu/output/1a_mRNAseq_alignment_1SampleSheet'
@@ -127,7 +120,7 @@ yl <- c(-6,6)
 #  
 # layout(matrix(c(2, 3, 6, 4, 5, 1), 2, 3, byrow=TRUE))
 # layout.show(4)
-options(scipen=2) # to get scientific notation; the higher, the less the probability of lossing scientific notation
+options(scipen=2) 
 
 for (i in 1:length(l.objects) ) {
   DESeq2::plotMA(Rdf[[i]][[2]], ylim=yl, alpha=metadata(Rdf[[i]][[2]])$alpha/5, main=l.objects[[i]] , xlab='', ylab='', colSig='red',
