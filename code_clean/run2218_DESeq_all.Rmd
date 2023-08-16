@@ -43,16 +43,9 @@ s27     collB   sgRNA_UV        treatment4
 
 # 2. Load libraries and default parameters
 ```{r, load-libraries, include=FALSE}
-suppressPackageStartupMessages(library(tidyverse))
-suppressPackageStartupMessages(library(DESeq2))
-suppressPackageStartupMessages(library(gtools))
-suppressPackageStartupMessages(library(ggplot2))
-suppressPackageStartupMessages(library(grid))
-#suppressPackageStartupMessages(library(apeglm))
-#suppressPackageStartupMessages(library(ashr))
-#suppressPackageStartupMessages(library(pheatmap))
-#suppressPackageStartupMessages(library(tibble))
-#library(RColorBrewer)
+
+libr <- c("tidyverse", "tibble", "DESeq2", "gtools", "ggplot2", "grid", "apeglm", "ashr", "pheatmap", "")
+invisible(lapply(libr, library, character.only = TRUE))
 .pardefault <- par()
 ```
 
