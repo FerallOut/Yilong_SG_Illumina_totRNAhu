@@ -46,14 +46,8 @@ The experimental design of the run:
 
 # 2. Load libraries and default parameters
 ```{r, load-libraries}
-suppressPackageStartupMessages(library(tidyverse))
-suppressPackageStartupMessages(library(DESeq2))
-suppressPackageStartupMessages(library(gtools))
-suppressPackageStartupMessages(library(ggplot2))
-suppressPackageStartupMessages(library(grid))
-suppressPackageStartupMessages(library(gridExtra))
-suppressPackageStartupMessages(library(ashr))
-suppressPackageStartupMessages(library(pheatmap))
+libr <- c("tidyverse", "DESeq2", "gtools", "ggplot2", "grid", "gridExtra", "ashr", "pheatmap")
+invisible(lapply(libr, library, character.only = TRUE))
 ```
 
 # 3. Load and clean the necessary data 
@@ -222,9 +216,6 @@ Split the totRNA samples from the sgRNA samples and analyze the separately.
   
 
 ```{r, run-DESeq2}
-# run the DESeq() function to get the DE and save the results
-# or just load the object to save time
-
 #des_all <- DESeq(dds) 
 #saveRDS(des_all, file=paste0(out_dir,'/', 'des_all.Rdata'))
 des_all <- readRDS(file=paste0(out_dir,'/', 'des_all.Rdata'))
@@ -310,8 +301,8 @@ for (k in RNA_contrasts){
 v.condTotRNA <- RNA_contrasts[grepl(pattern = "totRNA_*", RNA_contrasts)]
 ########################################
 
-par(oma = c(2,2,2,1),    # margins for whole plot
-    mar = c(3.1, 2.1, 2.1, 1.1)  # margins for individual plots
+par(oma = c(2,2,2,1),   
+    mar = c(3.1, 2.1, 2.1, 1.1) 
     )
 
 layout(matrix(c(1, 2, 3, 4), 2, 2))
@@ -373,12 +364,12 @@ title(main = paste0("MA plots for DE analysis_shrink, alpha<0.05"),
 ### 7) b. volcano plots
 
 ```{r, volcano_plots_totRNA, fig.height=7, fig.width=10}
-par(oma = c(2,2,2,1),    # margins for whole plot
-    mar = c(4.1, 4.1, 2.1, 1.1)  # margins for individual plots
+par(oma = c(2,2,2,1),  
+    mar = c(4.1, 4.1, 2.1, 1.1) 
     )
 layout(matrix(c(1, 2, 3, 4), 2, 2))
 
-options(scipen=0) # to get scientific notation; the higher, the less the probability of lossing scientific notation
+options(scipen=0)
 
 for (i in 1:length(v.condTotRNA) ) {
   # Make a basic volcano plot
@@ -400,8 +391,8 @@ for (i in 1:length(v.condTotRNA) ) {
 
 ```{r, volcano_plots_sgRNA, fig.height=9, fig.width=10}
 
-par(oma = c(2,2,2,1),    # margins for whole plot
-    mar = c(4.1, 4.1, 2.1, 1.1)  # margins for individual plots
+par(oma = c(2,2,2,1),    
+    mar = c(4.1, 4.1, 2.1, 1.1)  
     )
 layout(matrix(c(1, 2, 3, 
                 4, 5, 6), 3, 2))
