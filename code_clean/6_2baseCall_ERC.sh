@@ -68,43 +68,43 @@ export bed_slop_genesGRCh38
 export genomeGRCh38
 
 t0=$(date +%s)   
+
 ###For SNP genotyping and filtering:
-#find ${HC_ERCvcfs} -iname "*_HC_ERC.vcf.gz" | sort -rV | \
-#    xargs -n 1 -P 8 -I in_file sh -c 'file=$(basename in_file | cut -d '_' -f 1); \
-#        gatk --java-options "-Xms2G -Xmx2G -XX:ParallelGCThreads=2" GenotypeGVCFs -R ${genomeGRCh38} \
-#        -V in_file -O ${HC_SNP}/$file"_HC_SNP.vcf.gz" --tmp-dir /data/extended/ \
-#        --include-non-variant-sites false -L ${bed_slop_genesGRCh38} \
-#        --add-output-vcf-command-line  2>${HC_SNPlog}/${file}"_HC_SNP.log" ; \
-#        echo "** GenotypeGVCF SNP for $(basename in_file) done" ' 
+find ${HC_ERCvcfs} -iname "*_HC_ERC.vcf.gz" | sort -rV | \
+    xargs -n 1 -P 8 -I in_file sh -c 'file=$(basename in_file | cut -d '_' -f 1); \
+        gatk --java-options "-Xms2G -Xmx2G -XX:ParallelGCThreads=2" GenotypeGVCFs -R ${genomeGRCh38} \
+        -V in_file -O ${HC_SNP}/$file"_HC_SNP.vcf.gz" --tmp-dir /data/extended/ \
+        --include-non-variant-sites false -L ${bed_slop_genesGRCh38} \
+        --add-output-vcf-command-line  2>${HC_SNPlog}/${file}"_HC_SNP.log" ; \
+        echo "** GenotypeGVCF SNP for $(basename in_file) done" ' 
 
 ## filter out each location (not SNPs):
-#find ${HC_SNP} -iname "*_HC_SNP.vcf.gz" | sort -rV | \
-#    xargs -n 1 -P 8 -I in_file sh -c 'file=$(basename in_file | cut -d '_' -f 1); gatk VariantFiltration -R ${genomeGRCh38} -V in_file \
-#         -O ${HC_SNPfilt}/$file"_SNPsoftFilt.vcf.gz" \
-#         --filter-expression "QD < 2.0 || FS > 60.0 || MQ < 40.0 || SOR>3.0 || DP < 10" \
-#         --filter-name "snp_filter" \
-#         --missing-values-evaluate-as-failing \
-#         2>${HC_SNPfiltLog}/${file}"_SNPsoftFilt.log"; 
-#         echo "** Soft filtering for $(basename in_file) done" ' 
+find ${HC_SNP} -iname "*_HC_SNP.vcf.gz" | sort -rV | \
+    xargs -n 1 -P 8 -I in_file sh -c 'file=$(basename in_file | cut -d '_' -f 1); gatk VariantFiltration -R ${genomeGRCh38} -V in_file \
+         -O ${HC_SNPfilt}/$file"_SNPsoftFilt.vcf.gz" \
+         --filter-expression "QD < 2.0 || FS > 60.0 || MQ < 40.0 || SOR>3.0 || DP < 10" \
+         --filter-name "snp_filter" \
+         --missing-values-evaluate-as-failing \
+         2>${HC_SNPfiltLog}/${file}"_SNPsoftFilt.log"; 
+         echo "** Soft filtering for $(basename in_file) done" ' 
 
-#find ${HC_SNPfilt} -iname "*_SNPsoftFilt.vcf.gz" | sort -rV | \
-#    xargs -n 1 -P 8 -I in_file sh -c 'file=$(basename in_file | cut -d '_' -f 1); gatk SelectVariants -R ${genomeGRCh38} -V in_file \
-#         -O ${HC_SNPfilt}/$file"_SNPFilt.vcf.gz" \
-#         --exclude-filtered --select-type-to-include SNP \
-#         --restrict-alleles-to BIALLELIC \
-#         2>${HC_SNPfiltLog}/${file}"_SNPFilt.log"; 
-#         echo "** Hard filtering for $(basename in_file) done" ' 
+find ${HC_SNPfilt} -iname "*_SNPsoftFilt.vcf.gz" | sort -rV | \
+    xargs -n 1 -P 8 -I in_file sh -c 'file=$(basename in_file | cut -d '_' -f 1); gatk SelectVariants -R ${genomeGRCh38} -V in_file \
+         -O ${HC_SNPfilt}/$file"_SNPFilt.vcf.gz" \
+         --exclude-filtered --select-type-to-include SNP \
+         --restrict-alleles-to BIALLELIC \
+         2>${HC_SNPfiltLog}/${file}"_SNPFilt.log"; 
+         echo "** Hard filtering for $(basename in_file) done" ' 
 ########################################
-#########################################
-#
+
 ### For all the positions in the genome:
-#find ${HC_ERCvcfs} -iname "*_HC_ERC.vcf.gz" | sort -rV | \
-#    xargs -n 1 -P 8 -I in_file sh -c 'file=$(basename in_file | cut -d '_' -f 1); \
-#        gatk --java-options "-Xms2G -Xmx2G -XX:ParallelGCThreads=2" GenotypeGVCFs -R ${genomeGRCh38} \
-#        -V in_file -O ${HC_all}/$file"_HC_all.vcf.gz" --tmp-dir /data/extended/ \
-#        --include-non-variant-sites true -L ${bed_slop_genesGRCh38} \
-#        --add-output-vcf-command-line  2>${HC_all_log}/${file}"_HC_all.log"; \
-#        echo "** GenotypeGVCF for all positions for $(basename in_file) done." ' 
+find ${HC_ERCvcfs} -iname "*_HC_ERC.vcf.gz" | sort -rV | \
+    xargs -n 1 -P 8 -I in_file sh -c 'file=$(basename in_file | cut -d '_' -f 1); \
+        gatk --java-options "-Xms2G -Xmx2G -XX:ParallelGCThreads=2" GenotypeGVCFs -R ${genomeGRCh38} \
+        -V in_file -O ${HC_all}/$file"_HC_all.vcf.gz" --tmp-dir /data/extended/ \
+        --include-non-variant-sites true -L ${bed_slop_genesGRCh38} \
+        --add-output-vcf-command-line  2>${HC_all_log}/${file}"_HC_all.log"; \
+        echo "** GenotypeGVCF for all positions for $(basename in_file) done." ' 
 
 ## filter out each location (not SNPs):
 find ${HC_all} -iname "*_HC_all.vcf.gz" | sort -rV | \
