@@ -5,8 +5,8 @@
 - plot all the numbers from the RSeQC 'read_distribution.py' command (.png in /images/)
 
 ```{r, load_libraries}
-suppressPackageStartupMessages(library(gtools))
-suppressPackageStartupMessages(library(ggplot2))
+libr <- c("gtools", "ggplot2")
+invisible(lapply(libr, library, character.only = TRUE))
 ```
 
 
