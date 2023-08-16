@@ -1,0 +1,145 @@
+---
+title: "2218_Yilong_mRNA_DESeq2"
+output:
+  html_document:
+    df_print: paged
+toc: yes
+---
+
+name    batch   condition       group
+#################################################
+s1      collA   totRNA_mock     All
+s2      collA   totRNA_mock     All
+s3      collB   totRNA_mock     All
+#################################################
+s4      collA   totRNA_arsenite treatment1
+s5      collB   totRNA_arsenite treatment1
+s6      collB   totRNA_arsenite treatment1
+s7      collB   totRNA_HS       treatment2
+s8      collB   totRNA_HS       treatment2
+s9      collB   totRNA_HS       treatment2
+s10     collA   totRNA_NaCl     treatment3
+s11     collB   totRNA_NaCl     treatment3
+s12     collB   totRNA_NaCl     treatment3
+s13     collA   totRNA_UV       treatment4
+s14     collA   totRNA_UV       treatment4
+s15     collB   totRNA_UV       treatment4
+##################################################
+s16     collA   sgRNA_arsenite  treatment1
+s17     collB   sgRNA_arsenite  treatment1
+s18     collB   sgRNA_arsenite  treatment1
+s19     collB   sgRNA_HS        treatment2
+s20     collB   sgRNA_HS        treatment2
+s21     collB   sgRNA_HS        treatment2
+s22     collA   sgRNA_NaCl      treatment3
+s23     collB   sgRNA_NaCl      treatment3
+s24     collB   sgRNA_NaCl      treatment3
+s25     collA   sgRNA_UV        treatment4
+s26     collA   sgRNA_UV        treatment4
+s27     collB   sgRNA_UV        treatment4
+
+
+## Introduction
+- check if by loading all the Robject vs by running all DESeq2 from scratch, I get the same results
+
+```{r, load_libraries}
+suppressPackageStartupMessages(library(DESeq2))
+```
+
+
+
+```{r}
+## TO DELETE?
+
+setwd('/data/manke/group/balan/projects/Yilong_SG_Illumina_totRNAhu/output/1a_mRNAseq_alignment_1SampleSheet')
+Robj <- load(paste0(in_dir,"/DEseq_basic_DESeq.Rdata") )
+ddr_shrunk
+```
+
+
+### Load the data 
+
+```{r, load-data}
+# example:
+  # dds_expCond <- load(paste0(common_path, "DESeq2_output/DEseq_basic_DESeq.Rdata") )
+
+# function to load all the DESeq R objects with their containing 'dds', 'ddr' and ''ddr_shr' objects into one R object
+f.load_multiple_R_objects <- function(common_path, dirs, list_objs) {
+  v.dt_s <- vector(mode = "list", length = length(list_objs))
+  
+  for (i in 1:length(list_objs) ) {
+    #print(i)
+    ## paste the directories and the name of the objects in the correct order!!!
+    ## 'common_path' should end in a '/'!!
+    load(paste0(common_path, '/', dirs[i], '/', 'DEseq_basic_DESeq.Rdata'))
+    assign(paste0('dds', '_', list_objs[i]), dds) 
+    assign(paste0('ddr', '_', list_objs[i]), ddr) 
+    assign(paste0('ddr_shr', '_', list_objs[i]), ddr_shrunk) 
+    
+    v.dt_s[[i]] <- list(get(paste0('dds','_',list_objs[i])), get(paste0('ddr','_',list_objs[i])), get(paste0('ddr_shr','_',list_objs[i])) )
+    names(v.dt_s)[i] <- list_objs[i]
+    }
+  return(v.dt_s)
+}
+
+#work_dir<- '/data/manke/group/balan/projects/Yilong_SG_Illumina_totRNAhu/output/2a_mRNAseq_DESeq_manual'
+
+# which folders to load
+path_dir <- '/data/manke/group/balan/projects/Yilong_SG_Illumina_totRNAhu/output/1a_mRNAseq_alignment_1SampleSheet'
+l.dir <- dir(path = path_dir, pattern = "DESeq2_", all.files = FALSE,
+                          full.names = FALSE, recursive = FALSE,
+                          ignore.case = FALSE, include.dirs = FALSE, no.. = FALSE)
+
+# give names to each of the treatment
+l.objects <- list('totRNA_mock_vs_ars', 'totRNA_mock_vs_HS', 'totRNA_mock_vs_NaCl', 'totRNA_mock_vs_UV')
+
+Rdf <- f.load_multiple_R_objects(path_dir, l.dir, l.objects)
+```
+
+```{r, plot_PCA_batch}
+#png("./manual_PCA.png", width=1600, height=800, units = "px", bg = "white")
+
+rld_PCA <- plotPCA(rlog(dds_batch, blind = TRUE), intgroup=c("batch", "condition"), returnData=TRUE)
+percentVar <- round(100 * attr(rld_PCA, "percentVar"), 1)   # rounded values for each axis of PC variance
+ggplot(rld_PCA, aes(PC1, PC2, color=condition, shape=batch)) +
+  geom_point(size=3) +
+  scale_shape_manual(values=c(3, 1, 2))+    # change shapes of symbols
+  scale_size_manual(values=c(8, 8, 8))+     # change sizes of symbols
+  xlab(paste0("PC1: ",percentVar[1])) +
+  ylab(paste0("PC2: ",percentVar[2])) 
+
+#dev.off()
+```
+
+
+```{r, MAplots}
+# png("./MA_plot2.png",
+#   width = 8*300,        # 5 x 300 pixels
+#   height = 5*300,
+#   res = 300,            # 300 pixels per inch
+#   pointsize = 8)        # smaller font size
+# 
+# par(oma = c(3,4,4,1),    # margins for whole plot
+#     mar = c(3,4,3.2,1)  # margins for individual plots
+#     ) 
+# 
+yl <- c(-6,6)
+#  
+# layout(matrix(c(2, 3, 6, 4, 5, 1), 2, 3, byrow=TRUE))
+# layout.show(4)
+options(scipen=2) # to get scientific notation; the higher, the less the probability of lossing scientific notation
+
+for (i in 1:length(l.objects) ) {
+  DESeq2::plotMA(Rdf[[i]][[2]], ylim=yl, alpha=metadata(Rdf[[i]][[2]])$alpha/5, main=l.objects[[i]] , xlab='', ylab='', colSig='red',
+                 cex.axis=1.5, cex.main=1.5)
+  abline(h=c(-1,1),col="dodgerblue",lwd=2)
+  }
+
+title(main = paste0("MA plots for DE analysis, alpha=", metadata(Rdf[[i]][[2]])$alpha/5),
+      xlab = "Mean expression",
+      ylab = "Log fold change",
+      outer = TRUE, line = 1,
+      cex.lab=2, cex.main=2)
+
+#dev.off()
+```

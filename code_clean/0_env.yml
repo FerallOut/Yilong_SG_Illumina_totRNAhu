@@ -18,5 +18,10 @@ dependencies:
   - pysam
   - rseqc
   - python
-  - bedtools
+  - bedtools2
   - bedops
+  - bcftools
+  - ca-certificates
+  - certifi
+  - openssl
+prefix: /localenv/balan/miniconda3/envs/SGproj

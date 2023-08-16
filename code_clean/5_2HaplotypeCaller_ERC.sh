@@ -42,7 +42,7 @@ export genomeGRCh38
 export bed_slop_genesGRCh38
 
 find ${bamSplitNCigar} -iname "*_SplitCorr.bam" | sort -V | \
-    xargs -n 1 -P 8 -I X sh -c 'file=$(basename X | cut -d '_' -f 1); t1=$(date +%s); gatk HaplotypeCaller -R ${genomeGRCh38} -L ${bed_slop_genesGRCh38} -I X --bam-output ${HC_ERCbams}/${file}"_HC_ERC.bam" -ERC BP_RESOLUTION -O ${HC_ERCvcfs}/$file"_HC_ERC.vcf.gz"  2>${HC_ERClog}/${file}"_HC_ERC.log"; t2=$(date +%s);  echo "** HaplotypeCaller in ERC mode for $(basename X) took $(date -ud "@$(( $t2 - $t1 ))" +%T) (HH:MM:SS)"  ' 
+    xargs -n 1 -P 8 -I X sh -c 'file=$(basename X | cut -d '_' -f 1); t1=$(date +%s); gatk --java-options "-Xms20G -Xmx20G -XX:ParallelGCThreads=2" HaplotypeCaller -R ${genomeGRCh38} -L ${bed_slop_genesGRCh38} -I X --bam-output ${HC_ERCbams}/${file}"_HC_ERC.bam" -ERC BP_RESOLUTION -O ${HC_ERCvcfs}/$file"_HC_ERC.vcf.gz"  2>${HC_ERClog}/${file}"_HC_ERC.log"; t2=$(date +%s);  echo "** HaplotypeCaller in ERC mode for $(basename X) took $(date -ud "@$(( $t2 - $t1 ))" +"%H:%M:%S") (HH:MM:SS)"  ' 
 
 t30=$(date +%s)   
 echo "Script ran for $(date -ud "@$(($t30 - $t0))" +%T) (HH:MM:SS)" 

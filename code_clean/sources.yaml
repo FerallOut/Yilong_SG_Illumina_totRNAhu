@@ -6,9 +6,15 @@ paths:
     bed_v27: /data_int/references/GRCh38_v27_genes.bed
     genome_GRCh38: /data_int/references/GRCh38_genome.fa
     slop_p10_GRCh38: /data_int/references/GRCh38_v27_genes_slop_p10.bed
- 
+    genome_GRCh38.fai: /data_int/references/GRCh38_genome.fa.fai
+
+    # initial folders    
     bam_files: /data_int/bam
     fastq_files: /data_int/fastq 
+
+
+    # external software
+    ARTDeco: ext_software/ARTDeco
 
     # output folders for the mRNA-seq snakePipes
     1a_mRNA-seq: /output/test_mRNA
@@ -19,6 +25,10 @@ paths:
     # the sample sheet for totalRNA samples and split sample sheets for sgRNA 
     totRNA_smplSheet: /data_int/sampleSheets/batch_totalRNA_corrected_sampleSheet.tsv
     sgRNA_split_smplSheet_dir: /data_int/sampleSheets/sampleSheets_sgRNA_split
+    totRNA_smplSheet_ARTDeco: /data_int/sampleSheets/batch_totalRNA_corrected_sampleSheet_ARTDeco.tsv
+    sgRNA_smplSheet_ARTDeco: /data_int/sampleSheets/batch_sgRNA_corrected_sampleSheet_ARTDeco.tsv
+    totRNA_compSheet_ARTDeco: /data_int/sampleSheets/batch_totalRNA_corrected_compSheet_ARTDeco.tsv
+    sgRNA_compSheet_ARTDeco: /data_int/sampleSheets/batch_sgRNA_corrected_compSheet_ARTDeco.tsv
 
     # output folder for fastq QC (RSeQC and kraken)
     3_qc_kraken: /output/3_qc_kraken_RSeQC/1_kraken
@@ -34,24 +44,29 @@ paths:
     5_SplitNCigar: /output/5_SNP_TtoCmut/4_bam_SplitNCigar
     5_SplitNCigar_logs: /output/5_SNP_TtoCmut/4_bam_SplitNCigar/logs
 
-    5_HC_norm: /output/5_SNP_TtoCmut/5_HaplotypeCaller_norm
-    5_HC_norm_logs: /output/5_SNP_TtoCmut/5_HaplotypeCaller_norm/logs
-    5_HC_norm_bamOut: /output/5_SNP_TtoCmut/5_HaplotypeCaller_norm/bamOut
-
     5_HC_ERC: /output/5_SNP_TtoCmut/5_HaplotypeCaller_ERC
     5_HC_ERC_logs: /output/5_SNP_TtoCmut/5_HaplotypeCaller_ERC/logs
     5_HC_ERC_bamOut: /output/5_SNP_TtoCmut/5_HaplotypeCaller_ERC/bamOut
-    
-    5_HCnorm_softFilt_all: /output/5_SNP_TtoCmut/6_HCnorm_SNV/1_HCnorm_softFilt_all
-    5_HCnorm_softFilt_logs: /output/5_SNP_TtoCmut/6_HCnorm_SNV/1_HCnorm_softFilt_all/logs
-    5_HCnorm_hardFilt_SNV: /output/5_SNP_TtoCmut/6_HCnorm_SNV/2_HCnorm_hardFilt_SNV
-    5_HCnorm_hardFilt_logs: /output/5_SNP_TtoCmut/6_HCnorm_SNV/2_HCnorm_hardFilt_SNV/logs
+   
+    5_HC_SNP: /output/5_SNP_TtoCmut/6_SNP/1_SNP_Genotype_vcfs
+    5_HC_SNP_log: /output/5_SNP_TtoCmut/6_SNP/1_SNP_Genotype_vcfs/logs
+    5_HC_SNP_filt: /output/5_SNP_TtoCmut/6_SNP/2_SNP_filter
+    5_HC_SNP_filtLog: /output/5_SNP_TtoCmut/6_SNP/2_SNP_filter/logs
 
-    5_HC_ERC_DBs: /output/5_SNP_TtoCmut/6_HC_ERC_SNV/1_HC_ERC_DBs
-    5_HC_ERC_DBs_logs: /output/5_SNP_TtoCmut/6_HC_ERC_SNV/1_HC_ERC_DBs/logs
-    5_HC_ERC_vcfs: /output/5_SNP_TtoCmut/6_HC_ERC_SNV/2_HC_ERCvcfs
-    5_HC_ERC_vcfs_logs: /output/5_SNP_TtoCmut/6_HC_ERC_SNV/2_HC_ERCvcfs/logs
+    5_HC_all: /output/5_SNP_TtoCmut/6_SNP/1_all_Genotype_vcfs
+    5_HC_all_log: /output/5_SNP_TtoCmut/6_SNP/1_all_Genotype_vcfs/logs
+    5_HC_all_filt: /output/5_SNP_TtoCmut/6_SNP/2_all_filter
+    5_HC_all_filtLog: /output/5_SNP_TtoCmut/6_SNP/2_all_filter/logs
+
+    5_SNPsites: /output/5_SNP_TtoCmut/6_SNP/3_SNP_processedMut/1_sites
+    5_SNPsitesLog: /output/5_SNP_TtoCmut/6_SNP/3_SNP_processedMut/1_sites/logs
+    5_SNPmerge: /output/5_SNP_TtoCmut/6_SNP/3_SNP_processedMut/2_merged
+    5_SNPmergeLog: /output/5_SNP_TtoCmut/6_SNP/3_SNP_processedMut/2_merged/logs
+    5_SNPeq3: /output/5_SNP_TtoCmut/6_SNP/3_SNP_processedMut/3_eq3
+    5_SNPeq3Log: /output/5_SNP_TtoCmut/6_SNP/3_SNP_processedMut/3_eq3/logs
+    5_counts: /output/5_SNP_TtoCmut/6_SNP/3_SNP_processedMut/4_counts
+    4_countsLog: /output/5_SNP_TtoCmut/6_SNP/3_SNP_processedMut/4_counts/logs
 
 
-    5_HC_ERC_hardFilt_SNV: /output/5_SNP_TtoCmut/6_HC_ERC_SNV/2_HCnorm_hardFilt_SNV
-    5_HC_ERC_hardFilt_logs: /output/5_SNP_TtoCmut/6_HC_ERC_SNV/2_HCnorm_hardFilt_SNV/logs
+    # sources for ARTDeco
+    9_artdeco: /output/9_ARTDeco
