@@ -6,10 +6,8 @@
 - plot only the numbers referring to human RNA: genomic, mitochondrial and ribosomal (.png in /images/)
 
 ```{r, load_libraries}
-suppressPackageStartupMessages(library(gtools))
-suppressPackageStartupMessages(library(dplyr))
-suppressPackageStartupMessages(library(stringr))
-suppressPackageStartupMessages(library(ggplot2))
+libr <- c("gtools", "ggplot2", "dplyr", "stringr")
+invisible(lapply(libr, library, character.only = TRUE))
 ```
 
 
@@ -25,7 +23,6 @@ l.files <- list.files(path = path_dir, pattern = "*.rep", all.files = FALSE,
 l.files <- mixedsort(sort(l.files))
 
 # load all files, together with the file basename and no extension
-# bind the loaded files in one data frame
 df.all_data <- do.call(rbind, (lapply(l.files, 
                       function(x) read.table(x, stringsAsFactors = FALSE, fill=TRUE, header=FALSE)[c(1,4,6)] %>% 
                       mutate(Sample = basename(sub('\\.rep$', '', x) ) ) ) ) ) 
